@@ -1,0 +1,8 @@
+
+Verbindung:
+Pumpe zur Platine, molex Verbinder FFC/FPC (Folienflachbandkab
+gibt es eine FFC Verlängerung?
+
+Montagehöhe Pumpe und Reservoir:
+Pumpe lassen im ausgeschalteten Zustand Flüssigkeit durchfließen -> Reservoir muss auf gleicher Höhe wie Pumpen und Auslass montiert werden
+besser: Auslass oberhalb Pumpen und diese oberhalb des Reservoirs, dafür benötigt man ein passives Druchflussventil (mp-cv) zwischen Pumpe und Reservoir, siehe Seite 30 im Datenblatt zur Pumpe
