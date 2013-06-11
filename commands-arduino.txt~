@@ -3,7 +3,6 @@ zum Beispiel so:
 "printtime" - Gibt automatisch die aktuelle Zeit über die Pumpen aus.
 "changespeed x" - Setzt die Druckgeschwindigkeit auf X
 "gettime" - liefert die aktuelle Zeit vom Echtzeituhrmodul an den Raspberry Pi
-"settime x" - synchronisiert die RTC, x=Unix-Zeitcode "date '+%s'"
 "printtext blabla" - Gibt beliebigen Text als Laufschrift aus
 "autoprint on x" - Setzt die Autoprintfunktion alle X Sekunden
 "autoprint off"
