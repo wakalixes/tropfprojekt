@@ -1,10 +1,16 @@
 #include <stdio.h>
 #include <SPI.h>
 #include <Wire.h>
+#include <avr/pgmspace.h>
 #include "Time.h"
 #include "DS3234RTC.h"
+#include "charsets.h"
 
-#define PINRTCCS     8
+#define PINRTCCS      8
+#define PINPUMPDATA   2
+#define PINPUMPCLK    3
+#define PINPUMPLATCH  4
+#define PINPUMPENABLE 5
 
 #define CMDHIGH "on"
 #define CMDLOW  "off"
@@ -36,6 +42,11 @@ struct configStruct {
 } config;
 
 void setup() {
+  pinMode(PINPUMPDATA, OUTPUT);
+  pinMode(PINPUMPCLK, OUTPUT);
+  pinMode(PINPUMPLATCH, OUTPUT);
+  pinMode(PINPUMPENABLE, OUTPUT);
+  digitalWrite(PINPUMPENABLE, LOW);
   initVariables();
   Serial.begin(115200);
   inputString.reserve(50);
@@ -67,6 +78,61 @@ void initRTC() {
   }  
   else
     Serial.println("ERROR: RTC is NOT connected!"); 
+}
+
+void printTime() {
+  unsigned char hourtenths = hour()/10;
+  unsigned char hourones = hour()%10;
+  unsigned char minutetenths = minute()/10;
+  unsigned char minuteones = minute()%10;
+  for (char i=0;i<5;i++) {
+    int shiftBitsHour = (getDigitBits(hourtenths, i)<<3)|(getDigitBits(hourones, i)<<0);
+    int shiftBitsMinute = (getDigitBits(minutetenths, i)<<3)|(getDigitBits(minuteones, i)<<0);
+    int shiftBitsPoint = 0;
+    if ((i==1)||(i==3)) shiftBitsPoint = 1;
+    int shiftBits = (shiftBitsHour<<7)|(shiftBitsPoint<<6)|(shiftBitsMinute<<0);
+    Serial.print(hourtenths);
+    Serial.print(" ");
+    Serial.print(hourones);
+    Serial.print(" : ");
+    Serial.print(minutetenths);
+    Serial.print(" ");
+    Serial.print(minuteones);
+    Serial.print(" - ");
+    serialPrintShiftBits(shiftBits);
+    Serial.println();
+    shiftWrite(shiftBits);
+    delay(100);
+  }
+}
+
+unsigned char getDigitBits(unsigned char digit, unsigned char row) {
+  return (digitMap[digit][row][0]<<2)|(digitMap[digit][row][1]<<1)|(digitMap[digit][row][2]<<0);
+}
+
+void printChar(char c) {
+  for (int i=0;i<=4;i++) {
+    char putChar = pgm_read_byte(&(charSet[c-0x20][i]));
+    Serial.print(putChar,HEX);
+    Serial.print(", ");
+  }
+  Serial.println();
+}
+
+void shiftWrite(int bitsToSend) {
+  digitalWrite(PINPUMPLATCH, LOW);
+  byte registerHigh = highByte(bitsToSend);
+  byte registerLow = lowByte(bitsToSend);
+  shiftOut(PINPUMPDATA, PINPUMPCLK, MSBFIRST, registerHigh);
+  shiftOut(PINPUMPDATA, PINPUMPCLK, MSBFIRST, registerLow);
+  digitalWrite(PINPUMPLATCH, HIGH);
+}
+
+void syncTimeCode() {
+  RTC.set(config.timecode);
+  setTime(config.timecode);
+  setSyncProvider(RTC.get);
+  Serial.println("RTC synced");
 }
 
 void serialSendFlags() {
@@ -118,11 +184,13 @@ void serialSendTime() {
   Serial.println(now());  
 }
 
-void syncTimeCode() {
-  RTC.set(config.timecode);
-  setTime(config.timecode);
-  setSyncProvider(RTC.get);
-  Serial.println("RTC synced");
+void serialPrintShiftBits(int shiftBits) {
+  for (int i=0;i<16;i++)
+  {
+    if (shiftBits < pow(2,i))
+    Serial.print("0");
+  }
+  Serial.print(shiftBits,BIN);
 }
 
 void serialCommands() {
@@ -149,7 +217,7 @@ void serialCommands() {
       commandAck = true;
     }
     else if (inputString.startsWith(CMDPRINTTIME)) {
-       //TODO
+      printTime();
       commandAck = true;
     }      
     else if (inputString.startsWith(CMDPRINTTEXT)) {
