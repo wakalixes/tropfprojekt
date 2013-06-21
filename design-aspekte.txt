@@ -8,3 +8,7 @@ Pumpe lassen im ausgeschalteten Zustand Flüssigkeit durchfließen -> Reservoir 
 besser: Auslass oberhalb Pumpen und diese oberhalb des Reservoirs, dafür benötigt man ein passives Druchflussventil (mp-cv) zwischen Pumpe und Reservoir, siehe Seite 30 im Datenblatt zur Pumpe
 
 wasserdichte Gehäuse mit Kabeldurchführungen für raspi, Arduino und Steuerung, ev. auch Pumpen im Gehäuse
+
+Ausschalten der Pumpen testen (Ampl und Shutdown auf GND)
+
+Stromverbrauch (raspi, Arduino, Pumpen, Webcam) + Stromversorgung DC/DC Converter +5V

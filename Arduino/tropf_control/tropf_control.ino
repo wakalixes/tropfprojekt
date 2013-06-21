@@ -29,6 +29,8 @@ String valueString = "";
 boolean stringComplete = false;
 boolean commandAck = false;
 
+//TODO EEPROM save
+
 struct flagsStruct {
   boolean sendconfig;
   boolean sendtime;
@@ -36,6 +38,7 @@ struct flagsStruct {
 } flags;
 struct configStruct {
   unsigned int printspeed;
+  //TODO pumpontime;
   boolean autoprintenable;
   unsigned int autoprinttime;
   time_t timecode;
