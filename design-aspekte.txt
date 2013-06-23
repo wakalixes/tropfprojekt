@@ -1,5 +1,5 @@
 gemessene Pumprate: 
-max. Amplitude, interne Frequenz, Schlauchlänge 50cm
+max. Amplitude (Ua=1.27V), interne Frequenz, Schlauchlänge 50cm
 87 (große) Tropfen/Minute am Pumpengehäuse haftend
 mit Waage gemessen (Tara bleibt bei 0g hängen!):
 0min 634g

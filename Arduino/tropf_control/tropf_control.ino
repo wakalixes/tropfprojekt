@@ -12,16 +12,22 @@
 #define PINPUMPLATCH  4
 #define PINPUMPENABLE 5
 
+#define PINPUMPTEST   2  // remove
+
 #define CMDHIGH "on"
 #define CMDLOW  "off"
 #define CMDSEP  " "
-#define CMDGETTIME    "gettime"
-#define CMDSETTIME    "settime"
-#define CMDGETCONFIG  "getconfig"
-#define CMDCHGSPEED   "changespeed"
-#define CMDPRINTTIME  "printtime"
-#define CMDPRINTTEXT  "printtext"
-#define CMDAUTOPRINT  "autoprint"
+#define CMDGETTIME     "gettime"
+#define CMDSETTIME     "settime"
+#define CMDGETCONFIG   "getconfig"
+#define CMDCHGINTERVAL "changeinterval"
+#define CMDCHGONTIME   "changeontime"
+#define CMDPRINTTIME   "printtime"
+#define CMDPRINTTEXT   "printtext"
+#define CMDAUTOPRINT   "autoprint"
+#define CMDDEBUGPUMP   "debugpump"
+
+#define PUMPDEBUGINTERVAL  1000
 
 String inputString = "";
 String commandString = "";
@@ -37,9 +43,10 @@ struct flagsStruct {
   boolean synctime;
 } flags;
 struct configStruct {
-  unsigned int printspeed;
-  //TODO pumpontime;
+  unsigned int printinterval;
+  unsigned int pumpontime;
   boolean autoprintenable;
+  boolean debugpumpenable;
   unsigned int autoprinttime;
   time_t timecode;
 } config;
@@ -49,6 +56,7 @@ void setup() {
   pinMode(PINPUMPCLK, OUTPUT);
   pinMode(PINPUMPLATCH, OUTPUT);
   pinMode(PINPUMPENABLE, OUTPUT);
+  pinMode(PINPUMPTEST, OUTPUT); // remove
   digitalWrite(PINPUMPENABLE, LOW);
   initVariables();
   Serial.begin(115200);
@@ -64,7 +72,9 @@ void loop() {
 }
 
 void initVariables() {
-  config.printspeed = 10;
+  config.printinterval = 1000;
+  config.pumpontime = 300;
+  config.debugpumpenable = false;
   config.autoprintenable = false;
   config.autoprinttime = 60;
   config.timecode = now();
@@ -154,8 +164,13 @@ void serialSendFlags() {
 }
 
 void serialSendConfig() {
-  Serial.print("printspeed: ");
-  Serial.println(config.printspeed);
+  Serial.print("printinterval: ");
+  Serial.println(config.printinterval);
+  Serial.print("pumpontime: ");
+  Serial.println(config.pumpontime);
+  Serial.print("debugpump: ");
+  if (config.debugpumpenable) Serial.println("on");
+  else Serial.println("off");
   Serial.print("autoprint: ");
   if (config.autoprintenable) Serial.print("on");
   else Serial.print("off");
@@ -214,10 +229,15 @@ void serialCommands() {
       flags.sendconfig = true;
       commandAck = true;  
     }
-    else if (inputString.startsWith(CMDCHGSPEED)) {
+    else if (inputString.startsWith(CMDCHGINTERVAL)) {
       valueString = inputString.substring(inputString.indexOf(CMDSEP)+1,inputString.length()-1);
-      config.printspeed = valueString.toInt();
+      config.printinterval = valueString.toInt();
       commandAck = true;
+    }
+    else if (inputString.startsWith(CMDCHGONTIME)) {
+      valueString = inputString.substring(inputString.indexOf(CMDSEP)+1,inputString.length()-1);
+      config.pumpontime = valueString.toInt();
+      commandAck = true;  
     }
     else if (inputString.startsWith(CMDPRINTTIME)) {
       printTime();
@@ -239,6 +259,17 @@ void serialCommands() {
         config.autoprintenable = false;
         commandAck = true;
       }   
+    }
+    else if (inputString.startsWith(CMDDEBUGPUMP)) {
+      commandString = inputString.substring(inputString.indexOf(CMDSEP)+1);
+      if (commandString.startsWith(CMDHIGH)) {
+        config.debugpumpenable = true;
+        commandAck = true;
+      }
+      if (commandString.startsWith(CMDLOW)) {
+        config.debugpumpenable = false;
+        commandAck = true;  
+      }
     }
     Serial.print(inputString);
     if (commandAck) Serial.println("ACK");
