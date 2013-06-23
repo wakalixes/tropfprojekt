@@ -1,3 +1,29 @@
+gemessene Pumprate: 
+max. Amplitude, interne Frequenz, Schlauchlänge 50cm
+87 (große) Tropfen/Minute am Pumpengehäuse haftend
+mit Waage gemessen (Tara bleibt bei 0g hängen!):
+0min 634g
+2min 623g
+4min 611g
+5min 603g
+6min 596g
+7min 592g
+8min 584g
+9min 578g
+10min 572g
+6.6g Wasser pro Minute
+11min 566g
+12min 560g
+13min 553g
+14min 547g
+15min 541g
+16min 534g
+17min 528g
+18min 521g
+19min 515g
+20min 509g
+6.1ml/min
+
 
 Verbindung:
 Pumpe zur Platine, molex Verbinder FFC/FPC (Folienflachbandkabel)
@@ -12,3 +38,5 @@ wasserdichte Gehäuse mit Kabeldurchführungen für raspi, Arduino und Steuerung
 Ausschalten der Pumpen testen (Ampl und Shutdown auf GND)
 
 Stromverbrauch (raspi, Arduino, Pumpen, Webcam) + Stromversorgung DC/DC Converter +5V
+
+
