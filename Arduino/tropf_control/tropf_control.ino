@@ -2,6 +2,7 @@
 #include <SPI.h>
 #include <Wire.h>
 #include <avr/pgmspace.h>
+#include <avr/eeprom.h>
 #include "Time.h"
 #include "DS3234RTC.h"
 #include "charsets.h"
@@ -28,6 +29,9 @@
 #define CMDDEBUGPUMP   "debugpump"
 
 #define PUMPDEBUGINTERVAL  1000
+
+#define LOADCONFIGEEPROM 1
+#define EEPROMSTARTADDR  0
 
 String inputString = "";
 String commandString = "";
@@ -72,12 +76,16 @@ void loop() {
 }
 
 void initVariables() {
-  config.printinterval = 1000;
-  config.pumpontime = 300;
-  config.debugpumpenable = false;
-  config.autoprintenable = false;
-  config.autoprinttime = 60;
-  config.timecode = now();
+  if (LOADCONFIGEEPROM) {
+    readConfigEEPROM();
+  } else {
+    config.printinterval = 1000;
+    config.pumpontime = 300;
+    config.debugpumpenable = false;
+    config.autoprintenable = false;
+    config.autoprinttime = 60;
+    config.timecode = now();
+  }
 }
 
 void initRTC() {  
@@ -232,11 +240,13 @@ void serialCommands() {
     else if (inputString.startsWith(CMDCHGINTERVAL)) {
       valueString = inputString.substring(inputString.indexOf(CMDSEP)+1,inputString.length()-1);
       config.printinterval = valueString.toInt();
+      writeConfigEEPROM();
       commandAck = true;
     }
     else if (inputString.startsWith(CMDCHGONTIME)) {
       valueString = inputString.substring(inputString.indexOf(CMDSEP)+1,inputString.length()-1);
       config.pumpontime = valueString.toInt();
+      writeConfigEEPROM();
       commandAck = true;  
     }
     else if (inputString.startsWith(CMDPRINTTIME)) {
@@ -253,10 +263,12 @@ void serialCommands() {
         config.autoprintenable = true;
         valueString = commandString.substring(commandString.indexOf(CMDSEP)+1,commandString.length()-1);
         config.autoprinttime = valueString.toInt();
+        writeConfigEEPROM();
         commandAck = true;
       }
       if (commandString.startsWith(CMDLOW)) {
         config.autoprintenable = false;
+        writeConfigEEPROM();
         commandAck = true;
       }   
     }
@@ -264,10 +276,12 @@ void serialCommands() {
       commandString = inputString.substring(inputString.indexOf(CMDSEP)+1);
       if (commandString.startsWith(CMDHIGH)) {
         config.debugpumpenable = true;
+        writeConfigEEPROM();
         commandAck = true;
       }
       if (commandString.startsWith(CMDLOW)) {
         config.debugpumpenable = false;
+        writeConfigEEPROM();
         commandAck = true;  
       }
     }
@@ -289,4 +303,10 @@ void serialEvent() {
   }
 }
 
+void readConfigEEPROM() {
+  eeprom_read_block((void*)&config, (void*)EEPROMSTARTADDR, sizeof(config));  
+}
 
+void writeConfigEEPROM() {
+  eeprom_write_block((const void*)&config, (void*)EEPROMSTARTADDR, sizeof(config));
+}
