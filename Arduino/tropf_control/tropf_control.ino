@@ -30,6 +30,8 @@
 
 #define PUMPDEBUGINTERVAL  1000
 
+#define CHARMAXROWTIME   5
+#define CHARMAXROWTEXT   7
 #define LOADCONFIGEEPROM 1
 #define EEPROMSTARTADDR  0
 
@@ -39,13 +41,16 @@ String valueString = "";
 boolean stringComplete = false;
 boolean commandAck = false;
 
-//TODO EEPROM save
-
 struct flagsStruct {
   boolean sendconfig;
   boolean sendtime;
   boolean synctime;
+  boolean printtime;
+  boolean printnextrow;
+  boolean pumpson;
+  boolean pumpsoff;
 } flags;
+
 struct configStruct {
   unsigned int printinterval;
   unsigned int pumpontime;
@@ -54,6 +59,13 @@ struct configStruct {
   unsigned int autoprinttime;
   time_t timecode;
 } config;
+
+struct printTimeDataStruct {
+  unsigned char hour;
+  unsigned char minute;
+  unsigned char rowIdx;
+  unsigned long switchTime;
+} printTimeData;
 
 void setup() {
   pinMode(PINPUMPDATA, OUTPUT);
@@ -73,6 +85,7 @@ void setup() {
 void loop() {
   serialCommands();
   serialSendFlags();
+  printFlags();
 }
 
 void initVariables() {
@@ -101,30 +114,63 @@ void initRTC() {
     Serial.println("ERROR: RTC is NOT connected!"); 
 }
 
+void printFlags() {
+  if (flags.printtime) {
+    if (flags.printnextrow) {
+      flags.printnextrow = 0;
+      if (printTimeData.rowIdx>=CHARMAXROWTIME) {
+        flags.printtime = 0;
+        flags.pumpson = 0;
+        flags.pumpsoff = 0;
+        printTimeData.rowIdx = 0;
+        Serial.println("printing done");
+      } else {
+        int shiftBits = getPrintTimeRow(printTimeData.rowIdx,printTimeData.hour,printTimeData.minute);
+        printTimeData.rowIdx++;
+        shiftWrite(shiftBits);
+        flags.pumpson = 1;
+        printTimeData.switchTime = millis();
+        serialSendPrintTime(shiftBits);
+      }
+    }
+    if ((flags.pumpson)&&(!flags.pumpsoff)) {
+      if ((millis()-printTimeData.switchTime) >= config.pumpontime) {
+        shiftWrite(0);
+        flags.pumpson = 0;
+        flags.pumpsoff = 1;
+        printTimeData.switchTime = millis();
+      }
+    }
+    if ((!flags.pumpson)&&(flags.pumpsoff)) {
+      if ((millis()-printTimeData.switchTime) >= config.printinterval-config.pumpontime) {
+        flags.pumpsoff = 0;
+        flags.printnextrow = 1;
+      }
+    }
+  }  
+}
+
 void printTime() {
-  unsigned char hourtenths = hour()/10;
-  unsigned char hourones = hour()%10;
-  unsigned char minutetenths = minute()/10;
-  unsigned char minuteones = minute()%10;
-  for (char i=0;i<5;i++) {
-    int shiftBitsHour = (getDigitBits(hourtenths, i)<<3)|(getDigitBits(hourones, i)<<0);
-    int shiftBitsMinute = (getDigitBits(minutetenths, i)<<3)|(getDigitBits(minuteones, i)<<0);
-    int shiftBitsPoint = 0;
-    if ((i==1)||(i==3)) shiftBitsPoint = 1;
-    int shiftBits = (shiftBitsHour<<7)|(shiftBitsPoint<<6)|(shiftBitsMinute<<0);
-    Serial.print(hourtenths);
-    Serial.print(" ");
-    Serial.print(hourones);
-    Serial.print(" : ");
-    Serial.print(minutetenths);
-    Serial.print(" ");
-    Serial.print(minuteones);
-    Serial.print(" - ");
-    serialPrintShiftBits(shiftBits);
-    Serial.println();
-    shiftWrite(shiftBits);
-    delay(100);
-  }
+  printTimeData.hour = hour();
+  printTimeData.minute = minute();
+  printTimeData.rowIdx = 0;
+  flags.printtime = 1;
+  flags.printnextrow = 1;
+  flags.pumpson = 0;
+  flags.pumpsoff = 0;
+}
+
+int getPrintTimeRow(unsigned char i, unsigned char printhour, unsigned char printminute) {
+  if (i>(CHARMAXROWTIME-1)) i = CHARMAXROWTIME-1;
+  unsigned char hourtenths = printhour/10;
+  unsigned char hourones = printhour%10;
+  unsigned char minutetenths = printminute/10;
+  unsigned char minuteones = printminute%10;
+  int shiftBitsHour = (getDigitBits(hourtenths, i)<<3)|(getDigitBits(hourones, i)<<0);
+  int shiftBitsMinute = (getDigitBits(minutetenths, i)<<3)|(getDigitBits(minuteones, i)<<0);
+  int shiftBitsPoint = 0;
+  if ((i==1)||(i==3)) shiftBitsPoint = 1;
+  return (shiftBitsHour<<7)|(shiftBitsPoint<<6)|(shiftBitsMinute<<0);
 }
 
 unsigned char getDigitBits(unsigned char digit, unsigned char row) {
@@ -203,6 +249,20 @@ void serialSendConfig() {
   Serial.print(":");
   if (second()<10) Serial.print("0");
   Serial.println(second());
+}
+
+void serialSendPrintTime(int shiftBits) {
+  Serial.print("printing time - ");
+  if (printTimeData.hour<10) Serial.print("0");
+  Serial.print(printTimeData.hour);
+  Serial.print(":");
+  if (printTimeData.minute<10) Serial.print("0");
+  Serial.print(printTimeData.minute);
+  Serial.print(" - Row ");
+  Serial.print(printTimeData.rowIdx-1);
+  Serial.print(" - ");
+  serialPrintShiftBits(shiftBits);
+  Serial.println();  
 }
 
 void serialSendTime() {
