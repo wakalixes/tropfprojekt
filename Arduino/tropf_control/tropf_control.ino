@@ -27,6 +27,7 @@
 #define CMDCHGONTIME   "changeontime"
 #define CMDPRINTTIME   "printtime"
 #define CMDPRINTTEXT   "printtext"
+#define CMDMIRRORTEXT  "mirrortext"
 #define CMDAUTOPRINT   "autoprint"
 #define CMDDEBUGPUMP   "debugpump"
 #define CMDRESETCONFIG "resetconfig"
@@ -38,18 +39,21 @@
 #define RESETAUTOPRINT  0
 #define RESETAUTOTIME   60
 #define RESETDEBUG      0
+#define RESETMIRRORTEXT 0
 
 #define CHARMAXROWTIME   5
-#define CHARMAXROWTEXT   7
+#define CHARMAXROWTEXT   5
+#define CHARTEXTROWSPACE 1
 #define LOADCONFIGEEPROM 1
 #define EEPROMSTARTADDR  0
 
 String inputString = "";
 String commandString = "";
 String valueString = "";
+String printTextString = "";
 boolean stringComplete = false;
 boolean commandAck = false;
-int shiftBits;
+unsigned long shiftSwitchTime;
 
 struct flagsStruct {
   boolean sendconfig;
@@ -69,6 +73,7 @@ struct configStruct {
   boolean autoprintenable;
   boolean debugpumpenable;
   unsigned int autoprinttime;
+  boolean mirrortext;
   time_t timecode;
 } config;
 
@@ -76,10 +81,15 @@ struct printTimeDataStruct {
   unsigned char hour;
   unsigned char minute;
   unsigned char rowIdx;
-  unsigned long switchTime;
   unsigned long autoprintlast;
   int autoprintseconds;
 } printTimeData;
+
+struct printTextDataStruct {
+  unsigned int charNum;
+  unsigned int charIdx;
+  unsigned int columnIdx;  
+} printTextData;
 
 void setup() {
   pinMode(PINPUMPDATA, OUTPUT);
@@ -118,6 +128,7 @@ void resetVariables() {
   config.debugpumpenable = RESETDEBUG;
   config.autoprintenable = RESETAUTOPRINT;
   config.autoprinttime = RESETAUTOTIME;
+  config.mirrortext = RESETMIRRORTEXT;
   config.timecode = now();
   writeConfigEEPROM();
 }
@@ -130,7 +141,7 @@ void initRTC() {
       Serial.println("Unable to sync with the RTC");
     else
       Serial.println("RTC has set the system time");  
-  }  
+  }
   else
     Serial.println("ERROR: RTC is NOT connected!"); 
 }
@@ -149,20 +160,17 @@ void checkAutoPrint() {
       }
       printTimeData.autoprintseconds = config.autoprinttime-(now()-printTimeData.autoprintlast);
     }
-  }  
+  }
 }
 
 void printFlags() {
   if (flags.printtime) {
     if (flags.printnextrow) {
       flags.printnextrow = 0;
-      shiftBits = getPrintTimeRow(printTimeData.rowIdx,printTimeData.hour,printTimeData.minute);
-      printTimeData.rowIdx++;
-      shiftWrite(shiftBits);
-      flags.pumpson = 1;
-      printTimeData.switchTime = millis();
+      unsigned int shiftBits = getPrintTimeRow(printTimeData.rowIdx,printTimeData.hour,printTimeData.minute);
+      shiftInitWrite(shiftBits);
       serialSendPrintTime(shiftBits);
-      if (printTimeData.rowIdx>=CHARMAXROWTIME) {
+      if (printTimeData.rowIdx++>=CHARMAXROWTIME-1) {
         flags.printtime = 0;
         printTimeData.rowIdx = 0;
         Serial.println("printing done");        
@@ -170,21 +178,35 @@ void printFlags() {
     }
   }
   if (flags.printtext) {
-    //TODO
+    if (flags.printnextrow) {
+      flags.printnextrow = 0;
+      unsigned int shiftBits = getPrintTextRow(printTextData.charIdx,printTextData.columnIdx);
+      shiftInitWrite(shiftBits);
+      serialSendPrintText(shiftBits);
+      if (printTextData.columnIdx++>=(CHARMAXROWTEXT+CHARTEXTROWSPACE)-1) {
+        printTextData.columnIdx = 0;
+        if (printTextData.charIdx++>=printTextData.charNum-1) {
+          flags.printtext = 0;
+          printTextData.columnIdx = 0;
+          printTextData.charIdx = 0;
+          Serial.println("printing done");  
+        }
+      }
+    }
   }
 }
 
 void printTiming() {
   if ((flags.pumpson)&&(!flags.pumpsoff)) {
-    if ((millis()-printTimeData.switchTime) >= config.pumpontime) {
+    if ((millis()-shiftSwitchTime) >= config.pumpontime) {
       shiftWrite(0);
       flags.pumpson = 0;
       flags.pumpsoff = 1;
-      printTimeData.switchTime = millis();
+      shiftSwitchTime = millis();
     }
   }
   if ((!flags.pumpson)&&(flags.pumpsoff)) {
-    if ((millis()-printTimeData.switchTime) >= config.printinterval-config.pumpontime) {
+    if ((millis()-shiftSwitchTime) >= config.printinterval-config.pumpontime) {
       flags.pumpsoff = 0;
       flags.printnextrow = 1;
     }
@@ -201,7 +223,17 @@ void printTime() {
   flags.pumpsoff = 0;
 }
 
-int getPrintTimeRow(unsigned char i, unsigned char printhour, unsigned char printminute) {
+void printText() {
+  printTextData.charNum = printTextString.length();
+  printTextData.charIdx = 0;
+  printTextData.columnIdx = 0;
+  flags.printtext = 1;
+  flags.printnextrow = 1;
+  flags.pumpson = 0;
+  flags.pumpsoff = 0;
+}
+
+unsigned int getPrintTimeRow(unsigned char i, unsigned char printhour, unsigned char printminute) {
   if (i>(CHARMAXROWTIME-1)) i = CHARMAXROWTIME-1;
   unsigned char hourtenths = printhour/10;
   unsigned char hourones = printhour%10;
@@ -218,6 +250,31 @@ unsigned char getDigitBits(unsigned char digit, unsigned char row) {
   return (digitMap[digit][row][0]<<2)|(digitMap[digit][row][1]<<1)|(digitMap[digit][row][2]<<0);
 }
 
+unsigned int getPrintTextRow(unsigned int charIdx, unsigned int colIdx) {
+  if (colIdx>=CHARMAXROWTEXT) {
+    return 0;
+  }
+  char printChar = printTextString[charIdx];
+  return getCharBits(printChar, colIdx);
+}
+
+unsigned int getCharBits(unsigned char printChar, unsigned char column) {
+  unsigned char dataBits;
+  dataBits = pgm_read_byte(&(charSet[printChar-0x20][column]));
+  if (config.mirrortext) dataBits = reverseBitOrder(dataBits);
+  return (dataBits<<8);
+}
+
+unsigned char reverseBitOrder(unsigned char input) {
+  unsigned char output = 0;
+  int tmp = 0;
+  for(output = tmp = 0; tmp < 8; tmp++) {
+    output = (output << 1) + (input & 1); 
+    input >>= 1; 
+  }
+  return output;
+}
+
 void printChar(char c) {
   for (int i=0;i<=4;i++) {
     char putChar = pgm_read_byte(&(charSet[c-0x20][i]));
@@ -225,6 +282,12 @@ void printChar(char c) {
     Serial.print(", ");
   }
   Serial.println();
+}
+
+void shiftInitWrite(int shiftOutput) {
+  shiftWrite(shiftOutput);
+  shiftSwitchTime = millis();
+  flags.pumpson = 1;
 }
 
 void shiftWrite(int bitsToSend) {
@@ -271,6 +334,10 @@ void serialSendConfig() {
   else Serial.print("off");
   Serial.print(" ");
   Serial.println(config.autoprinttime);
+  Serial.print("mirrortext: ");
+  if (config.mirrortext) Serial.print("on");
+  else Serial.print("off");
+  Serial.println();
   Serial.print("timecode: ");
   Serial.println(now());
   Serial.print("date: ");
@@ -297,15 +364,28 @@ void serialSendTimeString() {
   Serial.print(second());
 }
 
-void serialSendPrintTime(int shiftBits) {
+void serialSendPrintTime(unsigned int shiftBits) {
   Serial.print("printing time - ");
   serialSendTimeString();
-  Serial.print(printTimeData.minute);
-  Serial.print(" - Row ");
-  Serial.print(printTimeData.rowIdx-1);
+  Serial.print(" - row ");
+  Serial.print(printTimeData.rowIdx);
   Serial.print(" - ");
-  serialPrintShiftBits(shiftBits);
+  serialSendShiftBits(shiftBits);
   Serial.println();  
+}
+
+void serialSendPrintText(unsigned int shiftBits) {
+  Serial.print("printing text - ");
+  serialSendTimeString();
+  Serial.print(" - char ");
+  Serial.print(printTextData.charIdx);
+  Serial.print(", ");
+  Serial.print(printTextString[printTextData.charIdx]);
+  Serial.print(" - column ");
+  Serial.print(printTextData.columnIdx);
+  Serial.print(" - ");
+  serialSendShiftBits(shiftBits);
+  Serial.println();
 }
 
 void serialSendTime() {
@@ -313,11 +393,9 @@ void serialSendTime() {
   Serial.println(now());  
 }
 
-void serialPrintShiftBits(int shiftBits) {
-  for (int i=0;i<16;i++)
-  {
-    if (shiftBits < pow(2,i))
-    Serial.print("0");
+void serialSendShiftBits(unsigned int shiftBits) {
+  for (int i=15;i>0;i--) {
+    if (shiftBits<pow(2,i)) Serial.print("0");
   }
   Serial.print(shiftBits,BIN);
 }
@@ -325,7 +403,6 @@ void serialPrintShiftBits(int shiftBits) {
 void serialCommands() {
   if (stringComplete) {
     commandAck = false;
-    inputString.toLowerCase();
     if (inputString.startsWith(CMDGETTIME)) {
       flags.sendtime = true;
       commandAck = true;  
@@ -359,7 +436,8 @@ void serialCommands() {
       commandAck = true;
     }      
     else if (inputString.startsWith(CMDPRINTTEXT)) {
-       //TODO
+      printTextString = inputString.substring(inputString.indexOf(CMDSEP)+1,inputString.length()-1);
+      printText();
       commandAck = true;
     }
     else if (inputString.startsWith(CMDAUTOPRINT)) {
@@ -367,7 +445,9 @@ void serialCommands() {
       if (commandString.startsWith(CMDHIGH)) {
         config.autoprintenable = true;
         valueString = commandString.substring(commandString.indexOf(CMDSEP)+1,commandString.length()-1);
-        config.autoprinttime = valueString.toInt();
+        int printTime = valueString.toInt();
+        if (printTime==0) printTime = RESETAUTOTIME;
+        config.autoprinttime = printTime;
         flags.autowaitfullminute = true;
         writeConfigEEPROM();
         commandAck = true;
@@ -394,6 +474,19 @@ void serialCommands() {
     else if (inputString.startsWith(CMDRESETCONFIG)) {
       resetVariables();
       commandAck = true;  
+    }
+    else if (inputString.startsWith(CMDMIRRORTEXT)) {
+      commandString = inputString.substring(inputString.indexOf(CMDSEP)+1);
+      if (commandString.startsWith(CMDHIGH)) {
+        config.mirrortext = true;
+        writeConfigEEPROM();
+        commandAck = true;
+      }
+      if (commandString.startsWith(CMDLOW)) {
+        config.mirrortext = false;
+        writeConfigEEPROM();
+        commandAck = true;
+      }
     }
     Serial.print(inputString);
     if (commandAck) Serial.println("ACK");
