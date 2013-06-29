@@ -14,6 +14,8 @@
 #define PINPUMPENABLE 5
 
 #define PINPUMPTEST   2  // remove
+#define PINPUMPTEST2  3
+#define PINPUMPTEST3  4
 
 #define CMDHIGH "on"
 #define CMDLOW  "off"
@@ -27,8 +29,15 @@
 #define CMDPRINTTEXT   "printtext"
 #define CMDAUTOPRINT   "autoprint"
 #define CMDDEBUGPUMP   "debugpump"
+#define CMDRESETCONFIG "resetconfig"
 
 #define PUMPDEBUGINTERVAL  1000
+
+#define RESETINTERVAL   1000
+#define RESETONTIME     300
+#define RESETAUTOPRINT  0
+#define RESETAUTOTIME   60
+#define RESETDEBUG      0
 
 #define CHARMAXROWTIME   5
 #define CHARMAXROWTEXT   7
@@ -40,6 +49,7 @@ String commandString = "";
 String valueString = "";
 boolean stringComplete = false;
 boolean commandAck = false;
+int shiftBits;
 
 struct flagsStruct {
   boolean sendconfig;
@@ -47,6 +57,8 @@ struct flagsStruct {
   boolean synctime;
   boolean printtime;
   boolean printnextrow;
+  boolean printtext;
+  boolean autowaitfullminute;
   boolean pumpson;
   boolean pumpsoff;
 } flags;
@@ -65,6 +77,8 @@ struct printTimeDataStruct {
   unsigned char minute;
   unsigned char rowIdx;
   unsigned long switchTime;
+  unsigned long autoprintlast;
+  int autoprintseconds;
 } printTimeData;
 
 void setup() {
@@ -85,20 +99,27 @@ void setup() {
 void loop() {
   serialCommands();
   serialSendFlags();
+  checkAutoPrint();
   printFlags();
+  printTiming();
 }
 
 void initVariables() {
   if (LOADCONFIGEEPROM) {
     readConfigEEPROM();
   } else {
-    config.printinterval = 1000;
-    config.pumpontime = 300;
-    config.debugpumpenable = false;
-    config.autoprintenable = false;
-    config.autoprinttime = 60;
-    config.timecode = now();
+    resetVariables();
   }
+}
+
+void resetVariables() {
+  config.printinterval = RESETINTERVAL;
+  config.pumpontime = RESETONTIME;
+  config.debugpumpenable = RESETDEBUG;
+  config.autoprintenable = RESETAUTOPRINT;
+  config.autoprinttime = RESETAUTOTIME;
+  config.timecode = now();
+  writeConfigEEPROM();
 }
 
 void initRTC() {  
@@ -114,38 +135,58 @@ void initRTC() {
     Serial.println("ERROR: RTC is NOT connected!"); 
 }
 
+void checkAutoPrint() {
+  if (config.autoprintenable) {
+    if (flags.autowaitfullminute) {
+      if (second()==0) {
+        flags.autowaitfullminute = 0;
+        printTimeData.autoprintseconds = 0;
+      }
+    } else {
+      if (printTimeData.autoprintseconds<=0) {
+        printTimeData.autoprintlast = now();
+        printTime();
+      }
+      printTimeData.autoprintseconds = config.autoprinttime-(now()-printTimeData.autoprintlast);
+    }
+  }  
+}
+
 void printFlags() {
   if (flags.printtime) {
     if (flags.printnextrow) {
       flags.printnextrow = 0;
+      shiftBits = getPrintTimeRow(printTimeData.rowIdx,printTimeData.hour,printTimeData.minute);
+      printTimeData.rowIdx++;
+      shiftWrite(shiftBits);
+      flags.pumpson = 1;
+      printTimeData.switchTime = millis();
+      serialSendPrintTime(shiftBits);
       if (printTimeData.rowIdx>=CHARMAXROWTIME) {
         flags.printtime = 0;
-        flags.pumpson = 0;
-        flags.pumpsoff = 0;
         printTimeData.rowIdx = 0;
-        Serial.println("printing done");
-      } else {
-        int shiftBits = getPrintTimeRow(printTimeData.rowIdx,printTimeData.hour,printTimeData.minute);
-        printTimeData.rowIdx++;
-        shiftWrite(shiftBits);
-        flags.pumpson = 1;
-        printTimeData.switchTime = millis();
-        serialSendPrintTime(shiftBits);
+        Serial.println("printing done");        
       }
     }
-    if ((flags.pumpson)&&(!flags.pumpsoff)) {
-      if ((millis()-printTimeData.switchTime) >= config.pumpontime) {
-        shiftWrite(0);
-        flags.pumpson = 0;
-        flags.pumpsoff = 1;
-        printTimeData.switchTime = millis();
-      }
+  }
+  if (flags.printtext) {
+    //TODO
+  }
+}
+
+void printTiming() {
+  if ((flags.pumpson)&&(!flags.pumpsoff)) {
+    if ((millis()-printTimeData.switchTime) >= config.pumpontime) {
+      shiftWrite(0);
+      flags.pumpson = 0;
+      flags.pumpsoff = 1;
+      printTimeData.switchTime = millis();
     }
-    if ((!flags.pumpson)&&(flags.pumpsoff)) {
-      if ((millis()-printTimeData.switchTime) >= config.printinterval-config.pumpontime) {
-        flags.pumpsoff = 0;
-        flags.printnextrow = 1;
-      }
+  }
+  if ((!flags.pumpson)&&(flags.pumpsoff)) {
+    if ((millis()-printTimeData.switchTime) >= config.printinterval-config.pumpontime) {
+      flags.pumpsoff = 0;
+      flags.printnextrow = 1;
     }
   }  
 }
@@ -241,6 +282,11 @@ void serialSendConfig() {
   if (day()<10) Serial.print("0");
   Serial.print(day());
   Serial.print(" ");
+  serialSendTimeString();
+  Serial.println();
+}
+
+void serialSendTimeString() {
   if (hour()<10) Serial.print("0");
   Serial.print(hour());
   Serial.print(":");
@@ -248,15 +294,12 @@ void serialSendConfig() {
   Serial.print(minute());
   Serial.print(":");
   if (second()<10) Serial.print("0");
-  Serial.println(second());
+  Serial.print(second());
 }
 
 void serialSendPrintTime(int shiftBits) {
   Serial.print("printing time - ");
-  if (printTimeData.hour<10) Serial.print("0");
-  Serial.print(printTimeData.hour);
-  Serial.print(":");
-  if (printTimeData.minute<10) Serial.print("0");
+  serialSendTimeString();
   Serial.print(printTimeData.minute);
   Serial.print(" - Row ");
   Serial.print(printTimeData.rowIdx-1);
@@ -299,7 +342,9 @@ void serialCommands() {
     }
     else if (inputString.startsWith(CMDCHGINTERVAL)) {
       valueString = inputString.substring(inputString.indexOf(CMDSEP)+1,inputString.length()-1);
-      config.printinterval = valueString.toInt();
+      int newInterval = valueString.toInt();
+      if (newInterval<config.pumpontime) newInterval = config.pumpontime;
+      config.printinterval = newInterval;
       writeConfigEEPROM();
       commandAck = true;
     }
@@ -323,6 +368,7 @@ void serialCommands() {
         config.autoprintenable = true;
         valueString = commandString.substring(commandString.indexOf(CMDSEP)+1,commandString.length()-1);
         config.autoprinttime = valueString.toInt();
+        flags.autowaitfullminute = true;
         writeConfigEEPROM();
         commandAck = true;
       }
@@ -344,6 +390,10 @@ void serialCommands() {
         writeConfigEEPROM();
         commandAck = true;  
       }
+    }
+    else if (inputString.startsWith(CMDRESETCONFIG)) {
+      resetVariables();
+      commandAck = true;  
     }
     Serial.print(inputString);
     if (commandAck) Serial.println("ACK");
