@@ -1,9 +1,20 @@
-zum Beispiel so:
+Befehle für Pumpcontroller:
 
-"printtime" - Gibt automatisch die aktuelle Zeit über die Pumpen aus.
-"changespeed x" - Setzt die Druckgeschwindigkeit auf X
-"gettime" - liefert die aktuelle Zeit vom Echtzeituhrmodul an den Raspberry Pi
-"settime x" - synchronisiert die RTC, x=Unix-Zeitcode "date '+%s'"
-"printtext blabla" - Gibt beliebigen Text als Laufschrift aus
-"autoprint on x" - Setzt die Autoprintfunktion alle X Sekunden
-"autoprint off"
+"gettime" - aktuelle Zeit von RTC im Unix-Zeitcode - Antwort "time: 1372621814"
+"settime x" - synchronisiert die RTC, x=Unix-Zeitcode in Sekunden von "date '+%s'"
+
+"getconfig" - antwortet mit aktueller Configuration des Pumpcontrollers
+"resetconfig" - setzt Konfiguration auf Standardwerte zurück und speichert diese in EEPROM
+
+"changeinterval x" - x in ms, setzt Zeit zwischen zwei Tropfen
+"changeontime x" - x in ms, setzt die Einschaltzeit der Pumpen (100%)
+"changepumpfact x" - x in %, ändert die individuelle Einschaltzeit
+
+"printtime" - gibt automatisch die aktuelle Uhrzeit hh:mm über die Pumpen aus - Antwort Zeitstempel und Bitmuster
+"printtext foo" - gibt Text als Laufschrift aus - Antwort Zeitstempel und Bitmuster
+
+"mirrortext on/off" - aktiviert Spiegelung der Laufschrift
+"autoprint on x" - x in s, aktiviert automatische Zeitausgabe, wartet auf volle Minute für erste Ausgabe
+"autoprint off" - deaktiviert Autoprintfunktion
+
+"debugpump on/off" - startet Debugmodus zum Testen der Pumpen

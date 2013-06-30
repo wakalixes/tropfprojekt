@@ -17,6 +17,8 @@
 #define PINPUMPTEST2  3
 #define PINPUMPTEST3  4
 
+#define MAXNUMPUMPS   16
+
 #define CMDHIGH "on"
 #define CMDLOW  "off"
 #define CMDSEP  " "
@@ -25,6 +27,7 @@
 #define CMDGETCONFIG   "getconfig"
 #define CMDCHGINTERVAL "changeinterval"
 #define CMDCHGONTIME   "changeontime"
+#define CMDCHGPUMPFACT "changepumpfact"
 #define CMDPRINTTIME   "printtime"
 #define CMDPRINTTEXT   "printtext"
 #define CMDMIRRORTEXT  "mirrortext"
@@ -36,6 +39,7 @@
 
 #define RESETINTERVAL   1000
 #define RESETONTIME     300
+#define RESETPUMPFACT   100
 #define RESETAUTOPRINT  0
 #define RESETAUTOTIME   60
 #define RESETDEBUG      0
@@ -70,6 +74,7 @@ struct flagsStruct {
 struct configStruct {
   unsigned int printinterval;
   unsigned int pumpontime;
+  unsigned int pumpOnTimesFact[MAXNUMPUMPS];
   boolean autoprintenable;
   boolean debugpumpenable;
   unsigned int autoprinttime;
@@ -91,12 +96,16 @@ struct printTextDataStruct {
   unsigned int columnIdx;  
 } printTextData;
 
+
+
 void setup() {
   pinMode(PINPUMPDATA, OUTPUT);
   pinMode(PINPUMPCLK, OUTPUT);
   pinMode(PINPUMPLATCH, OUTPUT);
   pinMode(PINPUMPENABLE, OUTPUT);
   pinMode(PINPUMPTEST, OUTPUT); // remove
+  pinMode(PINPUMPTEST2, OUTPUT); // remove
+  pinMode(PINPUMPTEST3, OUTPUT); // remove
   digitalWrite(PINPUMPENABLE, LOW);
   initVariables();
   Serial.begin(115200);
@@ -125,6 +134,7 @@ void initVariables() {
 void resetVariables() {
   config.printinterval = RESETINTERVAL;
   config.pumpontime = RESETONTIME;
+  for (int i=0;i<MAXNUMPUMPS;i++) config.pumpOnTimesFact[i] = RESETPUMPFACT;
   config.debugpumpenable = RESETDEBUG;
   config.autoprintenable = RESETAUTOPRINT;
   config.autoprinttime = RESETAUTOTIME;
@@ -137,7 +147,7 @@ void initRTC() {
   RTC.begin(PINRTCCS);
   if (RTC.isRunning()) {
     setSyncProvider(RTC.get);
-    if(timeStatus()!= timeSet) 
+    if (timeStatus()!= timeSet) 
       Serial.println("Unable to sync with the RTC");
     else
       Serial.println("RTC has set the system time");  
@@ -291,12 +301,14 @@ void shiftInitWrite(int shiftOutput) {
 }
 
 void shiftWrite(int bitsToSend) {
-  digitalWrite(PINPUMPLATCH, LOW);
+  if (bitsToSend&(1<<10)) digitalWrite(PINPUMPTEST, HIGH);
+  else digitalWrite(PINPUMPTEST, LOW); 
+  /*digitalWrite(PINPUMPLATCH, LOW);
   byte registerHigh = highByte(bitsToSend);
   byte registerLow = lowByte(bitsToSend);
   shiftOut(PINPUMPDATA, PINPUMPCLK, MSBFIRST, registerHigh);
   shiftOut(PINPUMPDATA, PINPUMPCLK, MSBFIRST, registerLow);
-  digitalWrite(PINPUMPLATCH, HIGH);
+  digitalWrite(PINPUMPLATCH, HIGH);*/
 }
 
 void syncTimeCode() {
@@ -322,14 +334,26 @@ void serialSendFlags() {
 }
 
 void serialSendConfig() {
-  Serial.print("printinterval: ");
+  Serial.print("printinterval (ms): ");
   Serial.println(config.printinterval);
-  Serial.print("pumpontime: ");
+  Serial.print("pumpontime (ms): ");
   Serial.println(config.pumpontime);
+  Serial.print("pumponfactors (%): ");
+  for (int i=0;i<MAXNUMPUMPS;i++) {
+    if (i==8) {
+      Serial.println();
+      Serial.print("                   ");
+    }
+    Serial.print(i);
+    Serial.print(":");
+    Serial.print(config.pumpOnTimesFact[i]);
+    if (i<MAXNUMPUMPS-1) Serial.print(", ");
+  }
+  Serial.println();
   Serial.print("debugpump: ");
   if (config.debugpumpenable) Serial.println("on");
   else Serial.println("off");
-  Serial.print("autoprint: ");
+  Serial.print("autoprint (s): ");
   if (config.autoprintenable) Serial.print("on");
   else Serial.print("off");
   Serial.print(" ");
@@ -338,7 +362,7 @@ void serialSendConfig() {
   if (config.mirrortext) Serial.print("on");
   else Serial.print("off");
   Serial.println();
-  Serial.print("timecode: ");
+  Serial.print("timecode (s): ");
   Serial.println(now());
   Serial.print("date: ");
   Serial.print(year());
@@ -403,6 +427,7 @@ void serialSendShiftBits(unsigned int shiftBits) {
 void serialCommands() {
   if (stringComplete) {
     commandAck = false;
+    Serial.println();
     if (inputString.startsWith(CMDGETTIME)) {
       flags.sendtime = true;
       commandAck = true;  
@@ -430,6 +455,17 @@ void serialCommands() {
       config.pumpontime = valueString.toInt();
       writeConfigEEPROM();
       commandAck = true;  
+    }
+    else if (inputString.startsWith(CMDCHGPUMPFACT)) {
+      valueString = inputString.substring(inputString.indexOf(CMDSEP)+1,inputString.length()-1);
+      valueString = valueString.substring(0,valueString.indexOf(CMDSEP));
+      int pumpNum = valueString.toInt();
+      if (pumpNum>MAXNUMPUMPS-1) pumpNum = MAXNUMPUMPS-1;
+      valueString = inputString.substring(inputString.indexOf(CMDSEP)+1,inputString.length()-1);
+      valueString = valueString.substring(valueString.indexOf(CMDSEP)+1,valueString.length());
+      config.pumpOnTimesFact[pumpNum] = valueString.toInt();
+      writeConfigEEPROM();
+      commandAck = true;
     }
     else if (inputString.startsWith(CMDPRINTTIME)) {
       printTime();
@@ -490,7 +526,8 @@ void serialCommands() {
     }
     Serial.print(inputString);
     if (commandAck) Serial.println("ACK");
-    else Serial.println("ERR"); 
+    else Serial.println("ERR");
+    Serial.println();
     inputString = "";
     stringComplete = false;
   }  
