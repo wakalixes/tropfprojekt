@@ -11,7 +11,7 @@ int pump1 = 2;
 int pump2 = 3;
 int pump3 = 4;
 
-int timeint = 280;
+int timeint = 240;
 int timepause = 500;
 
 // the setup routine runs once when you press reset:
