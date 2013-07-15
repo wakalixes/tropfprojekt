@@ -1,11 +1,13 @@
 /**
  * TropfControl v0.1
  * 
+ * used to control microfluid pumps for printing time/text into a river using food coloring
+ *
  * Features - v0.1:
  *    + controls up to 16 microfluid pumps via two shift registers 74HC595
  *    + full configuration via serial
  *    + saves configuration in EEPROM
- *    + prints time in 7-segment text perp to river
+ *    + prints time in 7-segment text perpendicular to river
  *    + autoprint functionality
  *    + prints text along river
  *    + mirror text
