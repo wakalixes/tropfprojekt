@@ -51,6 +51,8 @@
 #define LOADCONFIGEEPROM 1
 #define EEPROMSTARTADDR  0
 
+#define TIMEZONEOFFSET   2
+
 String inputString = "";
 String commandString = "";
 String valueString = "";
@@ -224,8 +226,8 @@ void printTiming() {
 }
 
 void printTime() {
-  printTimeData.hour = hour();
-  printTimeData.minute = minute();
+  printTimeData.hour = hour(now()+TIMEZONEOFFSET*3600);
+  printTimeData.minute = minute(now()+TIMEZONEOFFSET*3600);
   printTimeData.rowIdx = 0;
   flags.printtime = 1;
   flags.printnextrow = 1;
@@ -487,6 +489,7 @@ void serialCommands() {
         valueString = commandString.substring(commandString.indexOf(CMDSEP)+1,commandString.length()-1);
         int printTime = valueString.toInt();
         if (printTime==0) printTime = RESETAUTOTIME;
+        else if (printTime<=5) printTime = 5;
         config.autoprinttime = printTime;
         flags.autowaitfullminute = true;
         writeConfigEEPROM();
