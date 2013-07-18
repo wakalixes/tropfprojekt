@@ -1,7 +1,8 @@
 /**
  * TropfControl v0.1
  * 
- * used to control microfluid pumps for printing time/text into a river using food coloring
+ * used to control microfluid pumps for printing time/text into a river using 
+ * food coloring (project zeitfluss by islandrabe 2013)
  *
  * Features - v0.1:
  *    + controls up to 16 microfluid pumps via two shift registers 74HC595
@@ -17,6 +18,7 @@
  *    + implement individual ontime for each pump
  *    + temperature measurement
  *    + redistribute pumps
+ *    + measure water level via static pressure gauge
  * 
  * ----------------------------------------------------------------------------------
  * 
