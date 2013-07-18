@@ -17,8 +17,8 @@
  * TODOs:
  *    + implement individual ontime for each pump
  *    + temperature measurement
- *    + redistribute pumps
- *    + measure water level via static pressure gauge
+ *    + redistribute pumps, binary shifts
+ *    + measure water levels via static pressure gauges, 5 analog inputs
  * 
  * ----------------------------------------------------------------------------------
  * 
@@ -150,8 +150,6 @@ struct printTextDataStruct {
   unsigned int charIdx;
   unsigned int columnIdx;  
 } printTextData;
-
-
 
 void setup() {
   pinMode(PINPUMPDATA, OUTPUT);
