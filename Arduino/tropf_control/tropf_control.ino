@@ -61,11 +61,11 @@
 #include "DS3234RTC.h"
 #include "charsets.h"
 
-#define PINRTCCS      8
-#define PINPUMPDATA   2
-#define PINPUMPCLK    3
-#define PINPUMPLATCH  4
-#define PINPUMPENABLE 5
+#define PINRTCCS       8
+#define PINPUMPDATA    2
+#define PINPUMPCLK     3
+#define PINPUMPLATCH   4
+#define PINPUMPENABLE  5
 #define PINTANKSOFFSET 0  // shifts ADC channels (0-(MAXNUMTANKS-1))+Offset
 #define PINBATVOLTAGE  6  // measure battery voltage on ADC pin 6
 
@@ -188,9 +188,9 @@ void setup() {
   pinMode(PINPUMPCLK, OUTPUT);
   pinMode(PINPUMPLATCH, OUTPUT);
   pinMode(PINPUMPENABLE, OUTPUT);
-  pinMode(PINPUMPTEST, OUTPUT); // remove
-  pinMode(PINPUMPTEST2, OUTPUT); // remove
-  pinMode(PINPUMPTEST3, OUTPUT); // remove
+  //pinMode(PINPUMPTEST, OUTPUT); // remove
+  //pinMode(PINPUMPTEST2, OUTPUT); // remove
+  //pinMode(PINPUMPTEST3, OUTPUT); // remove
   digitalWrite(PINPUMPENABLE, LOW);
   analogReference(DEFAULT);
   initVariables();
