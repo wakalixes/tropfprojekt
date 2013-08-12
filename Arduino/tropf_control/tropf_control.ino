@@ -19,6 +19,7 @@
  *    + temperature measurement
  *    + redistribute pumps, binary shifts
  *    + measure water levels via static pressure gauges, 5 analog inputs
+ *    + measure battery voltage
  * 
  * ----------------------------------------------------------------------------------
  * 
@@ -65,31 +66,47 @@
 #define PINPUMPCLK    3
 #define PINPUMPLATCH  4
 #define PINPUMPENABLE 5
+#define PINTANKSOFFSET 0  // shifts ADC channels (0-(MAXNUMTANKS-1))+Offset
+#define PINBATVOLTAGE  6  // measure battery voltage on ADC pin 6
 
 #define PINPUMPTEST   2  // remove
 #define PINPUMPTEST2  3
 #define PINPUMPTEST3  4
 
 #define MAXNUMPUMPS   16
+#define MAXNUMTANKS   5
+
+#define BATRESHIGH    1000
+#define BATRESLOW     1000
+#define ANALOGREF     5.0
 
 #define CMDHIGH "on"
 #define CMDLOW  "off"
 #define CMDSEP  " "
-#define CMDGETTIME     "gettime"
-#define CMDSETTIME     "settime"
-#define CMDGETCONFIG   "getconfig"
-#define CMDCHGINTERVAL "changeinterval"
-#define CMDCHGONTIME   "changeontime"
-#define CMDCHGPUMPFACT "changepumpfact"
-#define CMDPRINTTIME   "printtime"
-#define CMDPRINTTEXT   "printtext"
-#define CMDMIRRORTEXT  "mirrortext"
-#define CMDAUTOPRINT   "autoprint"
-#define CMDDEBUGPUMP   "debugpump"
-#define CMDRESETCONFIG "resetconfig"
+#define CMDGETTIME      "gettime"
+#define CMDSETTIME      "settime"
+#define CMDGETCONFIG    "getconfig"
+#define CMDCHGINTERVAL  "changeinterval"
+#define CMDCHGONTIME    "changeontime"
+#define CMDCHGPUMPFACT  "changepumpfact"
+#define CMDPRINTTIME    "printtime"
+#define CMDPRINTTEXT    "printtext"
+#define CMDMIRRORTEXT   "mirrortext"
+#define CMDAUTOPRINT    "autoprint"
+#define CMDDEBUGPUMP    "debugpump"
+#define CMDRESETCONFIG  "resetconfig"
+#define CMDSTARTOPERAT  "startoperation"
+#define CMDSTOPOPERAT   "stopoperation"
+#define CMDAUTOOPERAT   "autooperation"
+#define CMDGETSTATUS    "getstatus"
+#define CMDGETLEVELS    "getlevels"
+#define CMDGETLEVELSRAW "getlevelsraw"
+#define CMDGETBATV      "getbatteryvoltage"
+#define CMDGETBATVRAW   "getbatteryvoltageraw"
 
 #define PUMPDEBUGINTERVAL  1000
 
+#define RESETOPERATION  1
 #define RESETINTERVAL   1000
 #define RESETONTIME     300
 #define RESETPUMPFACT   100
@@ -97,6 +114,8 @@
 #define RESETAUTOTIME   60
 #define RESETDEBUG      0
 #define RESETMIRRORTEXT 0
+#define RESETLEVELMIN   0
+#define RESETLEVELMAX   1024
 
 #define CHARMAXROWTIME   5
 #define CHARMAXROWTEXT   5
@@ -104,6 +123,7 @@
 #define LOADCONFIGEEPROM 1
 #define EEPROMSTARTADDR  0
 
+#define SENDWEBCAMTRIG  1
 #define TIMEZONEOFFSET   2
 
 String inputString = "";
@@ -116,6 +136,7 @@ unsigned long shiftSwitchTime;
 
 struct flagsStruct {
   boolean sendconfig;
+  boolean sendstatus;
   boolean sendtime;
   boolean synctime;
   boolean printtime;
@@ -127,15 +148,26 @@ struct flagsStruct {
 } flags;
 
 struct configStruct {
+  boolean isoperating;
   unsigned int printinterval;
   unsigned int pumpontime;
   unsigned int pumpOnTimesFact[MAXNUMPUMPS];
+  unsigned int levelmin[MAXNUMTANKS];
+  unsigned int levelmax[MAXNUMTANKS];
   boolean autoprintenable;
+  boolean autooperatenable;
   boolean debugpumpenable;
   unsigned int autoprinttime;
   boolean mirrortext;
   time_t timecode;
 } config;
+
+struct statusValStruct {
+  unsigned int levels[MAXNUMTANKS];
+  unsigned int levelsraw[MAXNUMTANKS];
+  unsigned int batvoltage;
+  unsigned int batvoltageraw;
+} statusVal;
 
 struct printTimeDataStruct {
   unsigned char hour;
@@ -160,6 +192,7 @@ void setup() {
   pinMode(PINPUMPTEST2, OUTPUT); // remove
   pinMode(PINPUMPTEST3, OUTPUT); // remove
   digitalWrite(PINPUMPENABLE, LOW);
+  analogReference(DEFAULT);
   initVariables();
   Serial.begin(115200);
   inputString.reserve(50);
@@ -171,9 +204,11 @@ void setup() {
 void loop() {
   serialCommands();
   serialSendFlags();
-  checkAutoPrint();
-  printFlags();
-  printTiming();
+  if (config.isoperating) {
+    checkAutoPrint();
+    printFlags();
+    printTiming();
+  }
 }
 
 void initVariables() {
@@ -185,9 +220,14 @@ void initVariables() {
 }
 
 void resetVariables() {
+  config.isoperating = RESETOPERATION;
   config.printinterval = RESETINTERVAL;
   config.pumpontime = RESETONTIME;
   for (int i=0;i<MAXNUMPUMPS;i++) config.pumpOnTimesFact[i] = RESETPUMPFACT;
+  for (int i=0;i<MAXNUMTANKS;i++) {
+    config.levelmin[i] = RESETLEVELMIN;
+    config.levelmax[i] = RESETLEVELMAX;
+  }
   config.debugpumpenable = RESETDEBUG;
   config.autoprintenable = RESETAUTOPRINT;
   config.autoprinttime = RESETAUTOTIME;
@@ -232,11 +272,15 @@ void printFlags() {
       flags.printnextrow = 0;
       unsigned int shiftBits = getPrintTimeRow(printTimeData.rowIdx,printTimeData.hour,printTimeData.minute);
       shiftInitWrite(shiftBits);
+      if (printTimeData.rowIdx==0) {
+        Serial.println("printing start");
+        if (SENDWEBCAMTRIG==1) Serial.println("trigger webcam");  
+      }
       serialSendPrintTime(shiftBits);
       if (printTimeData.rowIdx++>=CHARMAXROWTIME-1) {
         flags.printtime = 0;
         printTimeData.rowIdx = 0;
-        Serial.println("printing done");        
+        Serial.println("printing done");
       }
     }
   }
@@ -375,10 +419,28 @@ void syncTimeCode() {
   Serial.println("RTC synced");
 }
 
+void measLevels() {
+  for (int i=0;i<MAXNUMTANKS;i++) {
+    int levelVal = analogRead(i+PINTANKSOFFSET);
+    statusVal.levelsraw[i] = levelVal;
+    statusVal.levels[i] = map(levelVal,config.levelmin[i],config.levelmax[i],0,100);
+  }
+}
+
+void measBatVoltage() {
+  int batVal = analogRead(PINBATVOLTAGE);
+  statusVal.batvoltageraw = batVal;
+  statusVal.batvoltage = (double)batVal*ANALOGREF/1024*(BATRESHIGH+BATRESLOW)/BATRESLOW*1000;
+}
+
 void serialSendFlags() {
   if (flags.sendconfig) {
     serialSendConfig();
     flags.sendconfig = false;
+  }
+  if (flags.sendstatus) {
+    serialSendStatus();
+    flags.sendstatus = false;
   }
   if (flags.sendtime) {
     serialSendTime();
@@ -391,6 +453,8 @@ void serialSendFlags() {
 }
 
 void serialSendConfig() {
+  Serial.print("isoperating: ");
+  Serial.println(config.isoperating);
   Serial.print("printinterval (ms): ");
   Serial.println(config.printinterval);
   Serial.print("pumpontime (ms): ");
@@ -405,6 +469,22 @@ void serialSendConfig() {
     Serial.print(":");
     Serial.print(config.pumpOnTimesFact[i]);
     if (i<MAXNUMPUMPS-1) Serial.print(", ");
+  }
+  Serial.println();
+  Serial.print("tanklevelmin: ");
+  for (int i=0;i<MAXNUMTANKS;i++) {
+    Serial.print(i);
+    Serial.print(":");
+    Serial.print(config.levelmin[i]);
+    if (i<MAXNUMTANKS-1) Serial.print(", ");
+  }
+  Serial.println();
+  Serial.print("tanklevelmax: ");
+  for (int i=0;i<MAXNUMTANKS;i++) {
+    Serial.print(i);
+    Serial.print(":");
+    Serial.print(config.levelmax[i]);
+    if (i<MAXNUMTANKS-1) Serial.print(", ");
   }
   Serial.println();
   Serial.print("debugpump: ");
@@ -432,6 +512,30 @@ void serialSendConfig() {
   Serial.print(" ");
   serialSendTimeString();
   Serial.println();
+}
+
+void serialSendStatus() {
+  Serial.print("tanklevels: ");
+  for (int i=0;i<MAXNUMTANKS;i++) {
+    Serial.print(i);
+    Serial.print(":");
+    Serial.print(statusVal.levels[i]);
+    Serial.print("%");
+    if (i<MAXNUMTANKS-1) Serial.print(", ");
+  }
+  Serial.println();
+  Serial.print("tanklevelsraw: ");
+  for (int i=0;i<MAXNUMTANKS;i++) {
+    Serial.print(i);
+    Serial.print(":");
+    Serial.print(statusVal.levelsraw[i]);
+    if (i<MAXNUMTANKS-1) Serial.print(", ");
+  }
+  Serial.println();
+  Serial.print("batteryvoltage (mV): ");
+  Serial.println(statusVal.batvoltage);
+  Serial.print("batteryvoltageraw: ");
+  Serial.println(statusVal.batvoltageraw);
 }
 
 void serialSendTimeString() {
@@ -485,6 +589,16 @@ void serialCommands() {
   if (stringComplete) {
     commandAck = false;
     Serial.println();
+    if (inputString.startsWith(CMDSTARTOPERAT)) {
+      config.isoperating = true;
+      writeConfigEEPROM();
+      commandAck = true;
+    }
+    if (inputString.startsWith(CMDSTOPOPERAT)) {
+      config.isoperating = false;
+      writeConfigEEPROM();
+      commandAck = true;
+    }
     if (inputString.startsWith(CMDGETTIME)) {
       flags.sendtime = true;
       commandAck = true;  
@@ -497,6 +611,10 @@ void serialCommands() {
     }
     else if (inputString.startsWith(CMDGETCONFIG)) {
       flags.sendconfig = true;
+      commandAck = true;  
+    }
+    else if (inputString.startsWith(CMDGETSTATUS)) {
+      flags.sendstatus = true;
       commandAck = true;  
     }
     else if (inputString.startsWith(CMDCHGINTERVAL)) {
@@ -582,6 +700,7 @@ void serialCommands() {
         commandAck = true;
       }
     }
+    
     Serial.print(inputString);
     if (commandAck) Serial.println("ACK");
     else Serial.println("ERR");
