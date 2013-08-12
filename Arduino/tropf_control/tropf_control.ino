@@ -69,9 +69,9 @@
 #define PINTANKSOFFSET 0  // shifts ADC channels (0-(MAXNUMTANKS-1))+Offset
 #define PINBATVOLTAGE  6  // measure battery voltage on ADC pin 6
 
-#define PINPUMPTEST   2  // remove
-#define PINPUMPTEST2  3
-#define PINPUMPTEST3  4
+#define PINPUMPTEST   9  // remove
+#define PINPUMPTEST2  9
+#define PINPUMPTEST3  9
 
 #define MAXNUMPUMPS   16
 #define MAXNUMTANKS   5
@@ -398,18 +398,18 @@ void shiftInitWrite(int shiftOutput) {
 }
 
 void shiftWrite(int bitsToSend) {
-  if ((bitsToSend&(1<<9))!=0) digitalWrite(PINPUMPTEST, HIGH);
+  /*if ((bitsToSend&(1<<9))!=0) digitalWrite(PINPUMPTEST, HIGH);
   else digitalWrite(PINPUMPTEST, LOW);
   if ((bitsToSend&(1<<10))!=0) digitalWrite(PINPUMPTEST2, HIGH);
   else digitalWrite(PINPUMPTEST2, LOW); 
   if ((bitsToSend&(1<<11))!=0) digitalWrite(PINPUMPTEST3, HIGH);
-  else digitalWrite(PINPUMPTEST3, LOW); 
-  /*digitalWrite(PINPUMPLATCH, LOW);
+  else digitalWrite(PINPUMPTEST3, LOW);*/
+  digitalWrite(PINPUMPLATCH, LOW);
   byte registerHigh = highByte(bitsToSend);
   byte registerLow = lowByte(bitsToSend);
   shiftOut(PINPUMPDATA, PINPUMPCLK, MSBFIRST, registerHigh);
   shiftOut(PINPUMPDATA, PINPUMPCLK, MSBFIRST, registerLow);
-  digitalWrite(PINPUMPLATCH, HIGH);*/
+  digitalWrite(PINPUMPLATCH, HIGH);
 }
 
 void syncTimeCode() {
