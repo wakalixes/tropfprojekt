@@ -1,7 +1,7 @@
 Befehle für Pumpcontroller:
 
-"startoperation" - setzt den Arduino in Pumpmodus - ändert keine Konfiguration
-"stopoperation" - stopt den Arduino
+"startop" - setzt den Arduino in Pumpmodus - ändert keine Konfiguration
+"stopop" - stopt den Arduino
 
 "gettime" - aktuelle Zeit von RTC im Unix-Zeitcode - Antwort "time: 1372621814"
 "settime x" - synchronisiert die RTC, x=Unix-Zeitcode in Sekunden von "date '+%s'"
@@ -11,9 +11,9 @@ Befehle für Pumpcontroller:
 
 "getstatus" - liefert aktuellen Status der Tanks und Batterie
 
-"changeinterval x" - x in ms, setzt Zeit zwischen zwei Tropfen
-"changeontime x" - x in ms, setzt die Einschaltzeit der Pumpen (100%)
-"changepumpfact n x" - Pumpe n, x in %, ändert die individuelle Einschaltzeit
+"chginterval x" - x in ms, setzt Zeit zwischen zwei Tropfen
+"chgontime x" - x in ms, setzt die Einschaltzeit der Pumpen (100%)
+"chgpumpfact n x" - Pumpe n, x in %, ändert die individuelle Einschaltzeit
 
 "printtime" - gibt automatisch die aktuelle Uhrzeit hh:mm über die Pumpen aus - Antwort Zeitstempel und Bitmuster
 "printtext foo" - gibt Text als Laufschrift aus - Antwort Zeitstempel und Bitmuster
@@ -22,12 +22,9 @@ Befehle für Pumpcontroller:
 "autoprint on x" - x in s, aktiviert automatische Zeitausgabe, wartet auf volle Minute für erste Ausgabe
 "autoprint off" - deaktiviert Autoprintfunktion
 
-TODO "autooperation on/off" - aktiviert Betriebszeiten
+"autoop on/off" - aktiviert Betriebszeiten
 
-TODO "getlevels" - liefert Füllstandsanzeige für alle Tanks
-TODO "getlevelsraw" - liefert ADC-Werte der Füllstandsanzeige
-
-TODO "getbatteryvoltage" - liefert Batteriespannung
-TODO "getbatteryvoltageraw" - liefert ADC-Wert der Batteriespannungsmessung
+"getlevels" - liefert Füllstandsanzeige für alle Tanks
+"getbat" - liefert Batteriespannung
 
 "debugpump on/off" - startet Debugmodus zum Testen der Pumpen
