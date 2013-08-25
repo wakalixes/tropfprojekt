@@ -16,7 +16,6 @@
  *    
  * TODOs:
  *    + implement individual ontime for each pump
- *    + measure water levels via static pressure gauges, 5 analog inputs
  * 
  * ----------------------------------------------------------------------------------
  * 
@@ -66,47 +65,50 @@
 #define PINTANKSOFFSET 0  // shifts ADC channels (0-(MAXNUMTANKS-1))+Offset
 #define PINBATVOLTAGE  6  // measure battery voltage on ADC pin 6
 
-#define MAXNUMPUMPS   16
-#define MAXNUMTANKS   5
+#define MAXNUMPUMPS    16
+#define MAXNUMTANKS    5
 
-#define BATRESHIGH    1000
-#define BATRESLOW     1000
-#define ANALOGREF     5.0
+#define BATRESHIGH     1000
+#define BATRESLOW      1000
+#define ANALOGREF      5.0
 
-#define CMDHIGH "on"
-#define CMDLOW  "off"
-#define CMDSEP  " "
-#define CMDGETTIME      "gettime"
-#define CMDSETTIME      "settime"
-#define CMDGETCONFIG    "getconfig"
-#define CMDCHGINTERVAL  "chginterval"
-#define CMDCHGONTIME    "chgontime"
-#define CMDCHGPUMPFACT  "chgpumpfact"
-#define CMDPRINTTIME    "printtime"
-#define CMDPRINTTEXT    "printtext"
-#define CMDMIRRORTEXT   "mirrortext"
-#define CMDAUTOPRINT    "autoprint"
-#define CMDDEBUGPUMP    "debugpump"
-#define CMDRESETCONFIG  "resetconfig"
-#define CMDSTARTOPERAT  "startop"
-#define CMDSTOPOPERAT   "stopop"
-#define CMDAUTOOPERAT   "autoop"
-#define CMDGETSTATUS    "getstatus"
-#define CMDGETLEVELS    "t" //"getlevels"
-#define CMDGETBATV      "t" //"getbat"
+const char CMDHIGH[] =         "on";
+const char CMDLOW[] =          "off";
+const char CMDSEP[] =          " ";
+const char CMDGETTIME[] =      "gettime";
+const char CMDSETTIME[] =      "settime";
+const char CMDGETCONFIG[] =    "getconfig";
+const char CMDCHGINTERVAL[] =  "chginterval";
+const char CMDCHGONTIME[] =    "chgontime";
+const char CMDCHGPUMPFACT[] =  "chgpumpfact";
+const char CMDRESETPUMPFACT[]= "resetpumpfact";
+const char CMDPRINTTIME[] =    "printtime";
+const char CMDPRINTTEXT[] =    "printtext";
+const char CMDMIRRORTEXT[] =   "mirrortext";
+const char CMDAUTOPRINT[] =    "autoprint";
+const char CMDDEBUGPUMP[] =    "debugpump";
+const char CMDRESETCONFIG[] =  "resetconfig";
+const char CMDSTARTOPERAT[] =  "startop";
+const char CMDSTOPOPERAT[] =   "stopop";
+const char CMDAUTOOPERAT[] =   "autoop";
+const char CMDGETSTATUS[] =    "getstatus";
+const char CMDGETLEVELS[] =    "getlevels";
+const char CMDCHGPLEVELMIN[] = "chgplevelmin";
+const char CMDCHGPLEVELMAX[] = "chgplevelmax";
+const char CMDGETBATV[] =      "getbat";
 
 #define PUMPDEBUGINTERVAL  1000
 
-#define RESETOPERATION  1
-#define RESETINTERVAL   1000
-#define RESETONTIME     300
-#define RESETPUMPFACT   100
-#define RESETAUTOPRINT  0
-#define RESETAUTOTIME   60
-#define RESETDEBUG      0
-#define RESETMIRRORTEXT 0
-#define RESETLEVELMIN   0
-#define RESETLEVELMAX   1024
+#define RESETOPERATION   1
+#define RESETINTERVAL    1000
+#define RESETONTIME      300
+#define RESETPUMPFACT    100
+#define RESETAUTOPRINT   0
+#define RESETAUTOTIME    60
+#define RESETDEBUG       0
+#define RESETMIRRORTEXT  0
+#define RESETLEVELMIN    0
+#define RESETLEVELMAX    1023
 
 #define CHARMAXROWTIME   5
 #define CHARMAXROWTEXT   5
@@ -116,7 +118,7 @@
 #define MINAUTOPRINTTIME 1
 
 #define SENDWEBCAMTRIG   1
-#define TIMEZONEOFFSET   2 //TODO: check function
+#define TIMEZONEOFFSET   2
 
 String inputString = "";
 String commandString = "";
@@ -135,6 +137,7 @@ struct flagsStruct {
   boolean synctime;
   boolean printtime;
   boolean printnextrow;
+  boolean printcheckontime;
   boolean printtext;
   boolean autowaitfullminute;
   boolean pumpson;
@@ -177,6 +180,12 @@ struct printTextDataStruct {
   unsigned int columnIdx;  
 } printTextData;
 
+struct printOnDataStruct {
+  unsigned long shiftSwitchTime;
+  unsigned int curShiftBits;
+  unsigned int oldShiftBits;
+} printOnData;
+
 void setup() {
   pinMode(PINPUMPDATA, OUTPUT);
   pinMode(PINPUMPCLK, OUTPUT);
@@ -195,13 +204,16 @@ void setup() {
 void loop() {
   serialCommands();
   serialSendFlags();
+  measLevels();
+  measBatVoltage();
   if (config.autooperatenable) checkOperatingHours();
   if (config.isoperating) {
     checkAutoPrint();
     printFlags();
     printTiming();
+  } else {
+    shiftWrite(0);
   }
-  else shiftWrite(0);
 }
 
 void initVariables() {
@@ -234,12 +246,12 @@ void initRTC() {
   if (RTC.isRunning()) {
     setSyncProvider(RTC.get);
     if (timeStatus()!= timeSet) 
-      Serial.println("Unable to sync with the RTC");
+      Serial.println(F("Unable to sync with the RTC"));
     else
-      Serial.println("RTC has set the system time");  
+      Serial.println(F("RTC has set the system time"));  
   }
   else
-    Serial.println("ERROR: RTC is NOT connected!"); 
+    Serial.println(F("ERROR: RTC is NOT connected!")); 
 }
 
 void checkAutoPrint() {
@@ -260,19 +272,21 @@ void checkAutoPrint() {
 }
 
 void checkOperatingHours() {
-  switch (weekday()) { //TODO: TIMEZONEOFFSET
+  int curhour = hour(now()+TIMEZONEOFFSET*3600);
+  int curmin = minute(now()+TIMEZONEOFFSET*3600);
+  switch (weekday(now()+TIMEZONEOFFSET*3600)) {
     case 1:  //sunday
     case 2:  //monday
     case 7:  //saturday
-      if ((hour()>=10)&&(hour()<16)) config.isoperating = true;
+      if ( ((curhour==9)&&(curmin>=30))||((curhour>=10)&&(curhour<=15))||((curhour==16)&&(curmin<=30)) ) config.isoperating = true;
       else config.isoperating = false;
       break;
     case 3:  //tuesday
     case 4:  //wednesday
     case 5:  //thursday
     case 6:  //friday
-      if ( (((hour()==11)&&(minute()>=30))||(hour()>=12) && ((hour()<=12)||((hour()==13)&&(minute()<=30)))) ||
-         ((((hour()==16)&&(minute()>=30))||(hour()>=17)) && (hour()<19)) )
+      if ( ((curhour>=11) && (curhour<=13)) ||
+           ((curhour>=16) && (curhour<=18)) )
           config.isoperating = true;
       else config.isoperating = false;
   }  
@@ -285,14 +299,14 @@ void printFlags() {
       unsigned int shiftBits = getPrintTimeRow(printTimeData.rowIdx,printTimeData.hour,printTimeData.minute);
       shiftInitWrite(shiftBits);
       if (printTimeData.rowIdx==0) {
-        Serial.println("printing start");
-        if (SENDWEBCAMTRIG==1) Serial.println("trigger webcam");  
+        Serial.println(F("printing start"));
+        if (SENDWEBCAMTRIG==1) Serial.println(F("trigger webcam"));  
       }
       serialSendPrintTime(shiftBits);
       if (printTimeData.rowIdx++>=CHARMAXROWTIME-1) {
         flags.printtime = 0;
         printTimeData.rowIdx = 0;
-        Serial.println("printing done");
+        Serial.println(F("printing done"));
       }
     }
   }
@@ -308,7 +322,7 @@ void printFlags() {
           flags.printtext = 0;
           printTextData.columnIdx = 0;
           printTextData.charIdx = 0;
-          Serial.println("printing done");  
+          Serial.println(F("printing done"));  
         }
       }
     }
@@ -317,11 +331,26 @@ void printFlags() {
 
 void printTiming() {
   if ((flags.pumpson)&&(!flags.pumpsoff)) {
-    if ((millis()-shiftSwitchTime) >= config.pumpontime) { // TODO: ontime for every pump different, pumpontime*pumpfact/100
-      shiftWrite(0);
-      flags.pumpson = 0;
-      flags.pumpsoff = 1;
-      shiftSwitchTime = millis();
+    if (flags.printcheckontime) {
+      for (int i=0;i<MAXNUMPUMPS;i++) {  // calculated new shiftbit pattern
+        unsigned int pumpontimenow;
+        pumpontimenow = millis()-printOnData.shiftSwitchTime;
+        if (pumpontimenow>(((long)config.pumpontime*config.pumpOnTimesFact[i])/100)) {
+          printOnData.curShiftBits &= ~(1<<i);
+        }
+      }
+      if (printOnData.curShiftBits == 0) { // all pumps are off now
+        shiftWrite(0);
+        flags.pumpson = 0;
+        flags.pumpsoff = 1;
+        shiftSwitchTime = shiftSwitchTime+config.pumpontime;
+        flags.printcheckontime = false;
+      } else {
+        if (printOnData.curShiftBits != printOnData.oldShiftBits) {
+          shiftWrite(printOnData.curShiftBits);
+          printOnData.oldShiftBits = printOnData.curShiftBits;  
+        }
+      }
     }
   }
   if ((!flags.pumpson)&&(flags.pumpsoff)) {
@@ -407,6 +436,10 @@ void shiftInitWrite(int shiftOutput) {
   shiftWrite(shiftOutput);
   shiftSwitchTime = millis();
   flags.pumpson = 1;
+  printOnData.curShiftBits = shiftOutput;
+  printOnData.oldShiftBits = shiftOutput;
+  printOnData.shiftSwitchTime = millis();
+  flags.printcheckontime = true;
 }
 
 void shiftWrite(int bitsToSend) {
@@ -473,19 +506,19 @@ void serialSendFlags() {
 }
 
 void serialSendConfig() {
-  Serial.print("isoperating: ");
+  Serial.print(F("isoperating: "));
   Serial.println(config.isoperating);
-  Serial.print("operatinghours: ");
+  Serial.print(F("operatinghours: "));
   Serial.println(config.autooperatenable);
-  Serial.print("printinterval (ms): ");
+  Serial.print(F("printinterval (ms): "));
   Serial.println(config.printinterval);
-  Serial.print("pumpontime (ms): ");
+  Serial.print(F("pumpontime (ms): "));
   Serial.println(config.pumpontime);
-  Serial.print("pumponfactors (%): ");
+  Serial.print(F("pumponfactors (%): "));
   for (int i=0;i<MAXNUMPUMPS;i++) {
     if (i==8) {
       Serial.println();
-      Serial.print("                   ");
+      Serial.print(F("                   "));
     }
     Serial.print(i);
     Serial.print(":");
@@ -493,7 +526,7 @@ void serialSendConfig() {
     if (i<MAXNUMPUMPS-1) Serial.print(", ");
   }
   Serial.println();
-  Serial.print("tanklevelmin: ");
+  Serial.print(F("tanklevelmin: "));
   for (int i=0;i<MAXNUMTANKS;i++) {
     Serial.print(i);
     Serial.print(":");
@@ -501,7 +534,7 @@ void serialSendConfig() {
     if (i<MAXNUMTANKS-1) Serial.print(", ");
   }
   Serial.println();
-  Serial.print("tanklevelmax: ");
+  Serial.print(F("tanklevelmax: "));
   for (int i=0;i<MAXNUMTANKS;i++) {
     Serial.print(i);
     Serial.print(":");
@@ -509,21 +542,21 @@ void serialSendConfig() {
     if (i<MAXNUMTANKS-1) Serial.print(", ");
   }
   Serial.println();
-  Serial.print("debugpump: ");
+  Serial.print(F("debugpump: "));
   if (config.debugpumpenable) Serial.println("on");
   else Serial.println("off");
-  Serial.print("autoprint (s): ");
+  Serial.print(F("autoprint (s): "));
   if (config.autoprintenable) Serial.print("on");
   else Serial.print("off");
   Serial.print(" ");
   Serial.println(config.autoprinttime);
-  Serial.print("mirrortext: ");
+  Serial.print(F("mirrortext: "));
   if (config.mirrortext) Serial.print("on");
   else Serial.print("off");
   Serial.println();
-  Serial.print("timecode (s): ");
+  Serial.print(F("timecode (s): "));
   Serial.println(now());
-  Serial.print("date: ");
+  Serial.print(F("date: "));
   Serial.print(year());
   Serial.print(".");
   if (month()<10) Serial.print("0");
@@ -549,17 +582,17 @@ void serialSendStatus() {
 }
 
 void serialSendBatVolt() {
-  Serial.print("batteryvoltage (mV): ");
+  Serial.print(F("batteryvoltage (mV): "));
   Serial.print(statusVal.batvoltage);
 }
 
 void serialSendBatVoltRaw() {
-  Serial.print("batteryvoltageraw: ");
+  Serial.print(F("batteryvoltageraw: "));
   Serial.print(statusVal.batvoltageraw);  
 }
 
 void serialSendLevels() {
-  Serial.print("tanklevels: ");
+  Serial.print(F("tanklevels: "));
   for (int i=0;i<MAXNUMTANKS;i++) {
     Serial.print(i);
     Serial.print(":");
@@ -570,7 +603,7 @@ void serialSendLevels() {
 }
 
 void serialSendLevelsRaw() {
-  Serial.print("tanklevelsraw: ");
+  Serial.print(F("tanklevelsraw: "));
   for (int i=0;i<MAXNUMTANKS;i++) {
     Serial.print(i);
     Serial.print(":");
@@ -643,6 +676,8 @@ void serialCommands() {
     }
     if (inputString.startsWith(CMDSTOPOPERAT)) {
       config.isoperating = false;
+      flags.printtime = 0;
+      printTimeData.rowIdx = 0;
       writeConfigEEPROM();
       commandAck = true;
     }
@@ -681,6 +716,36 @@ void serialCommands() {
       flags.sendlevels = true;
       commandAck = true; 
     }
+    if (inputString.startsWith(CMDCHGPLEVELMIN)) {
+      commandString = inputString.substring(inputString.indexOf(CMDSEP)+1,inputString.length()-1);
+      valueString = commandString.substring(0,commandString.indexOf(CMDSEP));
+      int numtank = valueString.toInt();
+      if (numtank<MAXNUMTANKS) {
+        commandString = inputString.substring(inputString.indexOf(CMDSEP)+1,inputString.length()-1);
+        valueString = commandString.substring(commandString.indexOf(CMDSEP)+1,commandString.length());
+        int levelval = valueString.toInt();
+        if (levelval>1023) levelval = 1023;
+        if (levelval<0) levelval = 0;
+        config.levelmin[numtank] = levelval;
+        writeConfigEEPROM();
+        commandAck = true; 
+      }
+    }
+    if (inputString.startsWith(CMDCHGPLEVELMAX)) {
+      valueString = inputString.substring(inputString.indexOf(CMDSEP)+1,inputString.length()-1);
+      valueString = valueString.substring(0,valueString.indexOf(CMDSEP));
+      int numtank = valueString.toInt();
+      if (numtank<MAXNUMTANKS) {
+        valueString = inputString.substring(inputString.indexOf(CMDSEP)+1,inputString.length()-1);
+        valueString = valueString.substring(valueString.indexOf(CMDSEP)+1,valueString.length());
+        int levelval = valueString.toInt();
+        if (levelval>1023) levelval = 1023;
+        if (levelval<0) levelval = 0;
+        config.levelmax[numtank] = levelval;
+        writeConfigEEPROM();
+        commandAck = true; 
+      }
+    }
     if (inputString.startsWith(CMDGETBATV)) {
       flags.sendbatvolt = true;
       commandAck = true; 
@@ -699,16 +764,24 @@ void serialCommands() {
       writeConfigEEPROM();
       commandAck = true;  
     }
-    if (inputString.startsWith(CMDCHGPUMPFACT)) {  //TODO doesnt work
-      valueString = inputString.substring(inputString.indexOf(CMDSEP)+1,inputString.length()-1);
-      valueString = valueString.substring(0,valueString.indexOf(CMDSEP));
+    if (inputString.startsWith(CMDCHGPUMPFACT)) {
+      commandString = inputString.substring(inputString.indexOf(CMDSEP)+1,inputString.length()-1);
+      valueString = commandString.substring(0,commandString.indexOf(CMDSEP));
       int pumpNum = valueString.toInt();
-      if (pumpNum>MAXNUMPUMPS-1) pumpNum = MAXNUMPUMPS-1;
-      valueString = inputString.substring(inputString.indexOf(CMDSEP)+1,inputString.length()-1);
-      valueString = valueString.substring(valueString.indexOf(CMDSEP)+1,valueString.length());
-      config.pumpOnTimesFact[pumpNum] = valueString.toInt();
+      if (pumpNum<MAXNUMPUMPS) {
+        commandString = inputString.substring(inputString.indexOf(CMDSEP)+1,inputString.length()-1);
+        valueString = commandString.substring(commandString.indexOf(CMDSEP)+1,commandString.length());
+        config.pumpOnTimesFact[pumpNum] = valueString.toInt();
+        writeConfigEEPROM();
+        commandAck = true;
+      }
+    }
+    if (inputString.startsWith(CMDRESETPUMPFACT)) {
+      for (int i=0;i<MAXNUMPUMPS;i++) {
+        config.pumpOnTimesFact[i] = 100;
+      }
       writeConfigEEPROM();
-      commandAck = true;
+      commandAck = true;  
     }
     if (inputString.startsWith(CMDPRINTTIME)) {
       printTime();

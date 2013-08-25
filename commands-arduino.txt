@@ -14,6 +14,7 @@ Befehle für Pumpcontroller:
 "chginterval x" - x in ms, setzt Zeit zwischen zwei Tropfen
 "chgontime x" - x in ms, setzt die Einschaltzeit der Pumpen (100%)
 "chgpumpfact n x" - Pumpe n, x in %, ändert die individuelle Einschaltzeit
+"resetpumpfact" - setzt Pumpfaktoren auf 100%
 
 "printtime" - gibt automatisch die aktuelle Uhrzeit hh:mm über die Pumpen aus - Antwort Zeitstempel und Bitmuster
 "printtext foo" - gibt Text als Laufschrift aus - Antwort Zeitstempel und Bitmuster
@@ -25,6 +26,8 @@ Befehle für Pumpcontroller:
 "autoop on/off" - aktiviert Betriebszeiten
 
 "getlevels" - liefert Füllstandsanzeige für alle Tanks
+"chgplevelmin n x" - setzt minimalen Drcklevel x (ADC-Wert) für Kanal n
+"chgplevelmax n x" - setzt maximalen Drcklevel x (ADC-Wert) für Kanal n
 "getbat" - liefert Batteriespannung
 
 "debugpump on/off" - startet Debugmodus zum Testen der Pumpen
