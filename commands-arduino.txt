@@ -19,7 +19,7 @@ Befehle für Pumpcontroller:
 "printtime" - gibt automatisch die aktuelle Uhrzeit hh:mm über die Pumpen aus - Antwort Zeitstempel und Bitmuster
 "printtext foo" - gibt Text als Laufschrift aus - Antwort Zeitstempel und Bitmuster
 
-"mirrortext on/off" - aktiviert Spiegelung der Laufschrift
+"mirrortext on/off" - aktiviert Spiegebelung der Laufschrift
 "autoprint on x" - x in s, aktiviert automatische Zeitausgabe, wartet auf volle Minute für erste Ausgabe
 "autoprint off" - deaktiviert Autoprintfunktion
 
@@ -30,4 +30,5 @@ Befehle für Pumpcontroller:
 "chgplevelmax n x" - setzt maximalen Drcklevel x (ADC-Wert) für Kanal n
 "getbat" - liefert Batteriespannung
 
-"debugpump on/off" - startet Debugmodus zum Testen der Pumpen
+"debugpump on/off" - schaltet zum Testen alle Pumpen an/aus
+"debugpump on n" - schaltet nur Pumpe n zum Testen an/aus	

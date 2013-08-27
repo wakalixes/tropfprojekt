@@ -15,7 +15,6 @@
  *    + realtime Clock DS3234 for reliable time information
  *    
  * TODOs:
- *    + implement individual ontime for each pump
  * 
  * ----------------------------------------------------------------------------------
  * 
@@ -67,6 +66,7 @@
 
 #define MAXNUMPUMPS    16
 #define MAXNUMTANKS    5
+#define DEBUGSTATE     0xFFFF
 
 #define BATRESHIGH     1000
 #define BATRESLOW      1000
@@ -127,6 +127,8 @@ String printTextString = "";
 boolean stringComplete = false;
 boolean commandAck = false;
 unsigned long shiftSwitchTime;
+unsigned int predebugstate;
+unsigned int debugpumpstate;
 
 struct flagsStruct {
   boolean sendconfig;
@@ -206,13 +208,17 @@ void loop() {
   serialSendFlags();
   measLevels();
   measBatVoltage();
-  if (config.autooperatenable) checkOperatingHours();
-  if (config.isoperating) {
-    checkAutoPrint();
-    printFlags();
-    printTiming();
+  if (config.debugpumpenable) {
+    shiftWrite(debugpumpstate);
   } else {
-    shiftWrite(0);
+    if (config.autooperatenable) checkOperatingHours();
+    if (config.isoperating) {
+      checkAutoPrint();
+      printFlags();
+      printTiming();
+    } else {
+      shiftWrite(0);
+    }
   }
 }
 
@@ -251,7 +257,8 @@ void initRTC() {
       Serial.println(F("RTC has set the system time"));  
   }
   else
-    Serial.println(F("ERROR: RTC is NOT connected!")); 
+    Serial.println(F("ERROR: RTC is NOT connected!"));
+  Serial.println();
 }
 
 void checkAutoPrint() {
@@ -307,6 +314,7 @@ void printFlags() {
         flags.printtime = 0;
         printTimeData.rowIdx = 0;
         Serial.println(F("printing done"));
+        Serial.println();
       }
     }
   }
@@ -322,7 +330,8 @@ void printFlags() {
           flags.printtext = 0;
           printTextData.columnIdx = 0;
           printTextData.charIdx = 0;
-          Serial.println(F("printing done"));  
+          Serial.println(F("printing done"));
+          Serial.println();
         }
       }
     }
@@ -475,16 +484,19 @@ void measBatVoltage() {
 void serialSendFlags() {
   if (flags.sendconfig) {
     serialSendConfig();
+    Serial.println();
     flags.sendconfig = false;
   }
   if (flags.sendstatus) {
     serialSendStatus();
+    Serial.println();
     flags.sendstatus = false;
   }
   if (flags.sendlevels) {
     serialSendLevels();
     Serial.println();
     serialSendLevelsRaw();
+    Serial.println();
     Serial.println();
     flags.sendlevels = false;  
   }
@@ -493,14 +505,17 @@ void serialSendFlags() {
     Serial.println();
     serialSendBatVoltRaw();
     Serial.println();
+    Serial.println();
     flags.sendbatvolt = false;
   }
   if (flags.sendtime) {
     serialSendTime();
+    Serial.println();
     flags.sendtime = false; 
   }
   if (flags.synctime) {
     syncTimeCode();
+    Serial.println();
     flags.synctime = false;
   }  
 }
@@ -566,7 +581,6 @@ void serialSendConfig() {
   Serial.print(day());
   Serial.print(" ");
   serialSendTimeString();
-  Serial.println();
   Serial.println();
 }
 
@@ -655,7 +669,7 @@ void serialSendPrintText(unsigned int shiftBits) {
 
 void serialSendTime() {
   Serial.print("time: ");
-  Serial.println(now());  
+  Serial.println(now());
 }
 
 void serialSendShiftBits(unsigned int shiftBits) {
@@ -668,7 +682,6 @@ void serialSendShiftBits(unsigned int shiftBits) {
 void serialCommands() {
   if (stringComplete) {
     commandAck = false;
-    Serial.println();
     if (inputString.startsWith(CMDSTARTOPERAT)) {
       config.isoperating = true;
       writeConfigEEPROM();
@@ -814,11 +827,22 @@ void serialCommands() {
     if (inputString.startsWith(CMDDEBUGPUMP)) {
       commandString = inputString.substring(inputString.indexOf(CMDSEP)+1);
       if (commandString.startsWith(CMDHIGH)) {
+        valueString = commandString.substring(commandString.indexOf(CMDSEP)+1,commandString.length()-1);
+        if (commandString.indexOf(CMDSEP)==-1) {
+          debugpumpstate = DEBUGSTATE;
+        } else {
+          int pumpNum = valueString.toInt();
+          if (pumpNum>=MAXNUMPUMPS-1) pumpNum = MAXNUMPUMPS-1;
+          debugpumpstate |= (1<<pumpNum);
+        }
+        predebugstate = printOnData.curShiftBits;
         config.debugpumpenable = true;
         writeConfigEEPROM();
         commandAck = true;
       }
       if (commandString.startsWith(CMDLOW)) {
+        debugpumpstate = 0;
+        shiftWrite(predebugstate);
         config.debugpumpenable = false;
         writeConfigEEPROM();
         commandAck = true;  
