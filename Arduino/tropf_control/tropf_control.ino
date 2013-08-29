@@ -63,6 +63,7 @@
 #define PINPUMPENABLE  5
 #define PINTANKSOFFSET 0  // shifts ADC channels (0-(MAXNUMTANKS-1))+Offset
 #define PINBATVOLTAGE  6  // measure battery voltage on ADC pin 6
+#define PINRASPIRELAY  7
 
 #define MAXNUMPUMPS    16
 #define MAXNUMTANKS    5
@@ -71,6 +72,8 @@
 #define BATRESHIGH     1000
 #define BATRESLOW      1000
 #define ANALOGREF      5.0
+
+#define RASPIPRETRIG   1*60 // raspi shutdown pretrigger time in s
 
 const char CMDHIGH[] =         "on";
 const char CMDLOW[] =          "off";
@@ -96,10 +99,11 @@ const char CMDGETLEVELS[] =    "getlevels";
 const char CMDCHGPLEVELMIN[] = "chgplevelmin";
 const char CMDCHGPLEVELMAX[] = "chgplevelmax";
 const char CMDGETBATV[] =      "getbat";
-
-#define PUMPDEBUGINTERVAL  1000
+const char CMDAUTORASPI[] =    "autoswitchraspi";
+const char CMDSWITCHRASPI[] =  "switchraspi";
 
 #define RESETOPERATION   1
+#define RESETAUTOOPERAT  0
 #define RESETINTERVAL    1000
 #define RESETONTIME      300
 #define RESETPUMPFACT    100
@@ -109,6 +113,7 @@ const char CMDGETBATV[] =      "getbat";
 #define RESETMIRRORTEXT  0
 #define RESETLEVELMIN    0
 #define RESETLEVELMAX    1023
+#define RESETSWTICHRASPI 1
 
 #define CHARMAXROWTIME   5
 #define CHARMAXROWTEXT   5
@@ -129,6 +134,7 @@ boolean commandAck = false;
 unsigned long shiftSwitchTime;
 unsigned int predebugstate;
 unsigned int debugpumpstate;
+unsigned long raspiTrigTime;
 
 struct flagsStruct {
   boolean sendconfig;
@@ -144,6 +150,12 @@ struct flagsStruct {
   boolean autowaitfullminute;
   boolean pumpson;
   boolean pumpsoff;
+  boolean raspitrig;
+  boolean raspiserial;
+  boolean raspion;
+  boolean raspioff;
+  boolean opon;
+  boolean opoff;
 } flags;
 
 struct configStruct {
@@ -155,6 +167,7 @@ struct configStruct {
   unsigned int levelmax[MAXNUMTANKS];
   boolean autoprintenable;
   boolean autooperatenable;
+  boolean autoswitchraspi;
   boolean debugpumpenable;
   unsigned int autoprinttime;
   boolean mirrortext;
@@ -162,6 +175,7 @@ struct configStruct {
 } config;
 
 struct statusValStruct {
+  boolean israspion;
   unsigned int levels[MAXNUMTANKS];
   unsigned int levelsraw[MAXNUMTANKS];
   unsigned int batvoltage;
@@ -193,6 +207,7 @@ void setup() {
   pinMode(PINPUMPCLK, OUTPUT);
   pinMode(PINPUMPLATCH, OUTPUT);
   pinMode(PINPUMPENABLE, OUTPUT);
+  pinMode(PINRASPIRELAY, OUTPUT);
   digitalWrite(PINPUMPENABLE, LOW);
   analogReference(DEFAULT);
   initVariables();
@@ -206,6 +221,8 @@ void setup() {
 void loop() {
   serialCommands();
   serialSendFlags();
+  operatingFlags();
+  raspiFlags();
   measLevels();
   measBatVoltage();
   if (config.debugpumpenable) {
@@ -232,6 +249,8 @@ void initVariables() {
 
 void resetVariables() {
   config.isoperating = RESETOPERATION;
+  config.autooperatenable = RESETAUTOOPERAT;
+  config.autoswitchraspi = RESETSWTICHRASPI;
   config.printinterval = RESETINTERVAL;
   config.pumpontime = RESETONTIME;
   for (int i=0;i<MAXNUMPUMPS;i++) config.pumpOnTimesFact[i] = RESETPUMPFACT;
@@ -285,18 +304,98 @@ void checkOperatingHours() {
     case 1:  //sunday
     case 2:  //monday
     case 7:  //saturday
-      if ( ((curhour==9)&&(curmin>=30))||((curhour>=10)&&(curhour<=15))||((curhour==16)&&(curmin<=30)) ) config.isoperating = true;
-      else config.isoperating = false;
+      if ( ((curhour==9)&&(curmin>=30))||((curhour>=10)&&(curhour<=15))||((curhour==16)&&(curmin<=30)) )  {
+        if (!config.isoperating) switchOperatingOn();
+      } else {
+        if (config.isoperating) switchOperatingOff();
+      }
       break;
     case 3:  //tuesday
     case 4:  //wednesday
     case 5:  //thursday
     case 6:  //friday
       if ( ((curhour>=11) && (curhour<=13)) ||
-           ((curhour>=16) && (curhour<=18)) )
-          config.isoperating = true;
-      else config.isoperating = false;
+           ((curhour>=16) && (curhour<=18)) ) {
+        if (!config.isoperating) switchOperatingOn();
+      } else {
+        if (config.isoperating) switchOperatingOff();
+      }
   }  
+}
+
+void operatingFlags() {
+  if (flags.opon) {
+    switchOperatingOn();
+    flags.opon = false;
+  }
+  if (flags.opoff) {
+    switchOperatingOff();
+    flags.opoff = false;
+  }
+}
+
+void switchOperatingOn() {
+  if (config.autoswitchraspi&&(!statusVal.israspion)) triggerRaspiStartup();
+  config.isoperating = true;
+}
+
+void switchOperatingOff() {
+  if (config.autoswitchraspi&&statusVal.israspion) triggerRaspiShutdown();
+  flags.printtime = 0;
+  printTimeData.rowIdx = 0;
+  config.isoperating = false;
+}
+
+void raspiFlags() {
+  if (config.isoperating&&(!statusVal.israspion)) triggerRaspiStartup();
+  if (flags.raspion) {
+    triggerRaspiStartup();
+    flags.raspion = false;
+  }
+  if (flags.raspioff) {
+    triggerRaspiShutdown();
+    flags.raspioff = false;
+  }
+  if (flags.raspitrig) {
+    if ((now()-raspiTrigTime)>RASPIPRETRIG) {
+      flags.raspitrig = false;
+      switchRaspiOff();
+    }
+  }
+}
+
+void triggerRaspiStartup() {
+  flags.raspitrig = false;
+  flags.raspiserial = true;
+  switchRaspiOn();  
+}
+
+void triggerRaspiShutdown() {
+  Serial.println(F("raspi shutdown trigger"));
+  Serial.println();
+  raspiTrigTime = now();
+  flags.raspitrig = true;
+  flags.raspiserial = true;
+}
+
+void switchRaspiOn() {
+  if (flags.raspiserial) {
+    Serial.println(F("switching raspi on"));
+    Serial.println();
+    flags.raspiserial = false;
+  }
+  digitalWrite(PINRASPIRELAY, HIGH);
+  statusVal.israspion = true;
+}
+
+void switchRaspiOff() {
+  if (flags.raspiserial) {
+    Serial.println(F("switching raspi off"));
+    Serial.println();
+    flags.raspiserial = false;
+  }
+  digitalWrite(PINRASPIRELAY, LOW);
+  statusVal.israspion = false;
 }
 
 void printFlags() {
@@ -525,6 +624,8 @@ void serialSendConfig() {
   Serial.println(config.isoperating);
   Serial.print(F("operatinghours: "));
   Serial.println(config.autooperatenable);
+  Serial.print(F("autoswitchraspi: "));
+  Serial.println(config.autoswitchraspi);
   Serial.print(F("printinterval (ms): "));
   Serial.println(config.printinterval);
   Serial.print(F("pumpontime (ms): "));
@@ -585,6 +686,8 @@ void serialSendConfig() {
 }
 
 void serialSendStatus() {
+  Serial.print(F("raspi status: "));
+  Serial.println(statusVal.israspion);
   serialSendLevels();
   Serial.println();
   serialSendLevelsRaw();
@@ -683,14 +786,12 @@ void serialCommands() {
   if (stringComplete) {
     commandAck = false;
     if (inputString.startsWith(CMDSTARTOPERAT)) {
-      config.isoperating = true;
+      if (!config.autooperatenable) flags.opon = true;
       writeConfigEEPROM();
       commandAck = true;
     }
     if (inputString.startsWith(CMDSTOPOPERAT)) {
-      config.isoperating = false;
-      flags.printtime = 0;
-      printTimeData.rowIdx = 0;
+      if (!config.autooperatenable) flags.opoff = true;
       writeConfigEEPROM();
       commandAck = true;
     }
@@ -706,6 +807,30 @@ void serialCommands() {
         writeConfigEEPROM();
         commandAck = true;
       }   
+    }
+    if (inputString.startsWith(CMDAUTORASPI)) {
+      commandString = inputString.substring(inputString.indexOf(CMDSEP)+1);
+      if (commandString.startsWith(CMDHIGH)) {
+        config.autoswitchraspi = true;
+        writeConfigEEPROM();
+        commandAck = true;
+      }
+      if (commandString.startsWith(CMDLOW)) {
+        config.autoswitchraspi = false;
+        writeConfigEEPROM();
+        commandAck = true;  
+      }
+    }
+    if (inputString.startsWith(CMDSWITCHRASPI)) {
+      commandString = inputString.substring(inputString.indexOf(CMDSEP)+1);
+      if (commandString.startsWith(CMDHIGH)) {
+        flags.raspion = true;
+        commandAck = true;
+      }
+      if (commandString.startsWith(CMDLOW)) {
+        flags.raspioff = true;
+        commandAck = true; 
+      } 
     }
     if (inputString.startsWith(CMDGETTIME)) {
       flags.sendtime = true;

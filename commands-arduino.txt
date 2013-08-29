@@ -25,6 +25,9 @@ Befehle für Pumpcontroller:
 
 "autoop on/off" - aktiviert Betriebszeiten
 
+"autoswitchraspi on/off" - schaltet automatisch raspi mit Betriebszeiten an/aus
+"switchraspi on/off" - schaltet raspi an/aus
+
 "getlevels" - liefert Füllstandsanzeige für alle Tanks
 "chgplevelmin n x" - setzt minimalen Drcklevel x (ADC-Wert) für Kanal n
 "chgplevelmax n x" - setzt maximalen Drcklevel x (ADC-Wert) für Kanal n
