@@ -214,6 +214,7 @@ void setup() {
   digitalWrite(PINPUMPENABLE, LOW);
   analogReference(DEFAULT);
   initVariables();
+  config.isoperating = true;
   Serial.begin(115200);
   inputString.reserve(25);
   commandString.reserve(20);
