@@ -35,3 +35,18 @@ Befehle für Pumpcontroller:
 
 "debugpump on/off" - schaltet zum Testen alle Pumpen an/aus
 "debugpump on n" - schaltet nur Pumpe n zum Testen an/aus	
+
+Pumpe	ontime [ms]	ontime high [ms]
+1	260		defekt
+2	260		300	Luft im Ventil
+3	260
+4	260		260
+5	250		250
+6	260		260
+7	260		280
+8	280		290
+9	320
+10	340		380	Luft im Schlauch?
+11	230
+12	280		280
+13	340		340

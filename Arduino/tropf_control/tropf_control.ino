@@ -61,46 +61,48 @@
 #define PINPUMPCLK     3
 #define PINPUMPLATCH   4
 #define PINPUMPENABLE  5
-#define PINTANKSOFFSET 0  // shifts ADC channels (0-(MAXNUMTANKS-1))+Offset
-#define PINBATVOLTAGE  6  // measure battery voltage on ADC pin 6
+#define PINTANKSOFFSET 0  // shifts ADC channels  (0 to (MAXNUMTANKS-1))+Offset
+#define PINBATVOLTAGE  5  // measure battery voltage on ADC pin 5
 #define PINRASPIRELAY  7
 
 #define MAXNUMPUMPS    16
 #define MAXNUMTANKS    5
 #define DEBUGSTATE     0xFFFF
+#define TESTENABLE     0
+#define TESTTIMEDIFF   1000
 
-#define BATRESHIGH     1000
-#define BATRESLOW      1000
-#define ANALOGREF      5.0
+#define BATRESHIGH     22600
+#define BATRESLOW      10000
+#define ANALOGREF      4.95
 
-#define RASPIPRETRIG   1*60 // raspi shutdown pretrigger time in s
+#define RASPIPRETRIG   5*60 // raspi shutdown pretrigger time in s
 
-const char CMDHIGH[] =         "on";
-const char CMDLOW[] =          "off";
-const char CMDSEP[] =          " ";
-const char CMDGETTIME[] =      "gettime";
-const char CMDSETTIME[] =      "settime";
-const char CMDGETCONFIG[] =    "getconfig";
-const char CMDCHGINTERVAL[] =  "chginterval";
-const char CMDCHGONTIME[] =    "chgontime";
-const char CMDCHGPUMPFACT[] =  "chgpumpfact";
-const char CMDRESETPUMPFACT[]= "resetpumpfact";
-const char CMDPRINTTIME[] =    "printtime";
-const char CMDPRINTTEXT[] =    "printtext";
-const char CMDMIRRORTEXT[] =   "mirrortext";
-const char CMDAUTOPRINT[] =    "autoprint";
-const char CMDDEBUGPUMP[] =    "debugpump";
-const char CMDRESETCONFIG[] =  "resetconfig";
-const char CMDSTARTOPERAT[] =  "startop";
-const char CMDSTOPOPERAT[] =   "stopop";
-const char CMDAUTOOPERAT[] =   "autoop";
-const char CMDGETSTATUS[] =    "getstatus";
-const char CMDGETLEVELS[] =    "getlevels";
-const char CMDCHGPLEVELMIN[] = "chgplevelmin";
-const char CMDCHGPLEVELMAX[] = "chgplevelmax";
-const char CMDGETBATV[] =      "getbat";
-const char CMDAUTORASPI[] =    "autoswitchraspi";
-const char CMDSWITCHRASPI[] =  "switchraspi";
+const char CMDHIGH[] =          "on";
+const char CMDLOW[] =           "off";
+const char CMDSEP[] =           " ";
+const char CMDGETTIME[] =       "gettime";
+const char CMDSETTIME[] =       "settime";
+const char CMDGETCONFIG[] =     "getconfig";
+const char CMDCHGINTERVAL[] =   "chginterval";
+const char CMDCHGONTIME[] =     "chgontime";
+const char CMDCHGPUMPFACT[] =   "chgpumpfact";
+const char CMDRESETPUMPFACT[] = "resetpumpfact";
+const char CMDPRINTTIME[] =     "printtime";
+const char CMDPRINTTEXT[] =     "printtext";
+const char CMDMIRRORTEXT[] =    "mirrortext";
+const char CMDAUTOPRINT[] =     "autoprint";
+const char CMDDEBUGPUMP[] =     "debugpump";
+const char CMDRESETCONFIG[] =   "resetconfig";
+const char CMDSTARTOPERAT[] =   "startop";
+const char CMDSTOPOPERAT[] =    "stopop";
+const char CMDAUTOOPERAT[] =    "autoop";
+const char CMDGETSTATUS[] =     "getstatus";
+const char CMDGETLEVELS[] =     "getlevels";
+const char CMDCHGPLEVELMIN[] =  "chgplevelmin";
+const char CMDCHGPLEVELMAX[] =  "chgplevelmax";
+const char CMDGETBATV[] =       "getbat";
+const char CMDAUTORASPI[] =     "autoswitchraspi";
+const char CMDSWITCHRASPI[] =   "switchraspi";
 
 #define RESETOPERATION   1
 #define RESETAUTOOPERAT  0
@@ -135,6 +137,7 @@ unsigned long shiftSwitchTime;
 unsigned int predebugstate;
 unsigned int debugpumpstate;
 unsigned long raspiTrigTime;
+unsigned long oldtesttime;
 
 struct flagsStruct {
   boolean sendconfig;
@@ -235,6 +238,12 @@ void loop() {
       printTiming();
     } else {
       shiftWrite(0);
+    }
+  }
+  if (TESTENABLE) {
+    if ((millis()-oldtesttime)>TESTTIMEDIFF) {
+      oldtesttime = millis();
+      flags.sendstatus = 1;
     }
   }
 }
@@ -570,6 +579,7 @@ void measLevels() {
   for (int i=0;i<MAXNUMTANKS;i++) {
     int levelVal = analogRead(i+PINTANKSOFFSET);
     statusVal.levelsraw[i] = levelVal;
+    if (levelVal<config.levelmin[i]) levelVal = config.levelmin[i];
     statusVal.levels[i] = map(levelVal,config.levelmin[i],config.levelmax[i],0,100);
   }
 }
