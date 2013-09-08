@@ -16,25 +16,29 @@ Befehle für Pumpcontroller:
 "chgpumpfact n x" - Pumpe n, x in %, ändert die individuelle Einschaltzeit
 "resetpumpfact" - setzt Pumpfaktoren auf 100%
 
-"printtime" - gibt automatisch die aktuelle Uhrzeit hh:mm über die Pumpen aus - Antwort Zeitstempel und Bitmuster
-"printtext foo" - gibt Text als Laufschrift aus - Antwort Zeitstempel und Bitmuster
+"ptime" - gibt automatisch die aktuelle Uhrzeit hh:mm über die Pumpen aus - Antwort Zeitstempel und Bitmuster
+"ptext foo" - gibt Text als Laufschrift aus - Antwort Zeitstempel und Bitmuster
+
+"pvert on/off" - schreibt Uhrzeit vertical
+"ptwo on/off" - schreibt zwei oder eine Ziffer
 
 "mirrortext on/off" - aktiviert Spiegebelung der Laufschrift
 "autoprint on x" - x in s, aktiviert automatische Zeitausgabe, wartet auf volle Minute für erste Ausgabe
 "autoprint off" - deaktiviert Autoprintfunktion
 
-"autoop on/off" - aktiviert Betriebszeiten
+"aop on/off" - aktiviert Betriebszeiten
 
-"autoswitchraspi on/off" - schaltet automatisch raspi mit Betriebszeiten an/aus
-"switchraspi on/off" - schaltet raspi an/aus
+"aswpi on/off" - schaltet automatisch raspi mit Betriebszeiten an/aus
+"swpi on/off" - schaltet raspi an/aus
 
 "getlevels" - liefert Füllstandsanzeige für alle Tanks
-"chgplevelmin n x" - setzt minimalen Drcklevel x (ADC-Wert) für Kanal n
-"chgplevelmax n x" - setzt maximalen Drcklevel x (ADC-Wert) für Kanal n
+"chgplmin n x" - setzt minimalen Drcklevel x (ADC-Wert) für Kanal n
+"chgplmax n x" - setzt maximalen Drcklevel x (ADC-Wert) für Kanal n
 "getbat" - liefert Batteriespannung
 
-"debugpump on/off" - schaltet zum Testen alle Pumpen an/aus
-"debugpump on n" - schaltet nur Pumpe n zum Testen an/aus	
+"dpump on/off" - schaltet zum Testen alle Pumpen an/aus
+"dpump on n" - schaltet nur Pumpe n zum Testen an/aus	
+"dtiming on/off" - wechselt in timing-modus für Debuggen
 
 Pumpe	ontime [ms]	ontime high [ms]
 1	260		defekt
