@@ -235,7 +235,7 @@ void setup() {
   commandString.reserve(20);
   valueString.reserve(12);
   initRTC();
-  setTime(11,59,50,10,9,2013);
+  //setTime(11,59,50,10,9,2013);
 }
 
 void loop() {

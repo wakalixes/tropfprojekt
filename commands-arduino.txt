@@ -54,3 +54,15 @@ Pumpe	ontime [ms]	ontime high [ms]
 11	230
 12	280		280
 13	340		340
+
+Pumpe testen mit:
+	dtiming on	aktiviert Debugmodus mit Einschaltzeiten (wenn aus, dauernd ein)
+	dpump on 0	schaltet Pumpe 0 in den Testmodus
+	chgontime x	ausprobieren x ms
+	dpump off	schaltet Debugmodus aus
+
+die Pumpe mit der höchsten Zeit muss 100% sein, die Faktoren für die anderen Pumpen berechnen und konfigurieren
+	chgpumpfact 0 80
+	chgpumpfact 1 90
+	chgpumpfact 2 80
+	...
