@@ -235,6 +235,7 @@ void setup() {
   commandString.reserve(20);
   valueString.reserve(12);
   initRTC();
+  setTime(11,59,50,10,9,2013);
 }
 
 void loop() {
@@ -358,18 +359,26 @@ void checkOperatingHours() {
     case 1:  //sunday
     case 2:  //monday
     case 7:  //saturday
-      if ( ((curhour==9)&&(curmin>=30))||((curhour>=10)&&(curhour<=15))||((curhour==16)&&(curmin<=30)) )  {
+      if ((curhour>=10) && (curhour<=15)) {
         if (!config.isoperating) switchOperatingOn();
       } else {
         if (config.isoperating) switchOperatingOff();
       }
       break;
     case 3:  //tuesday
+      if ( ((curhour>=11) && (curhour<=17)) ||
+           ((curhour==18) && (curmin<=30)) ) {
+        if (!config.isoperating) switchOperatingOn();
+      } else {
+        if (config.isoperating) switchOperatingOff();
+      }
+      break;
     case 4:  //wednesday
     case 5:  //thursday
     case 6:  //friday
-      if ( ((curhour>=11) && (curhour<=13)) ||
-           ((curhour>=16) && (curhour<=18)) ) {
+      if ( ((curhour==11) && (curmin>=30)) ||
+           ((curhour>=12) && (curhour<=17)) ||
+           ((curhour==18) && (curmin<=30)) ) {
         if (!config.isoperating) switchOperatingOn();
       } else {
         if (config.isoperating) switchOperatingOff();
