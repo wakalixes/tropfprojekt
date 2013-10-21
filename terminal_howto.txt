@@ -1,0 +1,37 @@
+stty -F /dev/ttyACM0 115200 cs8 cread clocal
+
+exec 3<> /dev/ttyACM0
+echo "input something" >&3
+cat <&3
+exec 3>&-
+
+#################
+ODER (mit resets)
+#################
+
+echo "getconfig" > /dev/ttyACM0
+cat /dev/ttyACM0
+
+stty -F /dev/ttyACM0 cs8 115200 ignbrk -brkint -imaxbel -opost -onlcr -isig -icanon -iexten -echo -echoe -echok -echoctl -echoke noflsh -ixon -crtscts
+
+######
+python
+######
+
+#!/usr/bin/env python
+
+import serial                                 # imports serial library
+import time                                    # imports time library
+ser = serial.Serial("/dev/ttyACM0", 115200)            # init serial coms
+ser.write ("x")                                 # send void byte to reset arduino
+time.sleep (2)                                 # wait for arduino reset cycle
+ser.write ("A")                                 # send byte to turn on led   
+
+
+stty -F /dev/ttyACM0 115200
+exec 3<> /dev/ttyACM0
+ii -n its-tv -s irc.freenode.net
+cd irc/irc.freenode.net
+echo "/j #itsyndikat" > in
+cd \#itsyndikat
+tail -n 1 -f out | sed -e 's/^[0-9\-]* //' >&3

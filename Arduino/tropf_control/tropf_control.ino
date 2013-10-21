@@ -55,6 +55,7 @@
 #include "Time.h"
 #include "DS3234RTC.h"
 #include "charsets.h"
+#include <avr/wdt.h>
 
 #define PINRTCCS       8
 #define PINPUMPDATA    2
@@ -76,7 +77,7 @@
 #define BATRESLOW      10000
 #define ANALOGREF      4.95
 
-#define RASPIPRETRIG   5*60 // raspi shutdown pretrigger time in s
+#define RASPIPRETRIG   7*60 // raspi shutdown pretrigger time in s
 
 const char CMDHIGH[] =          "on";
 const char CMDLOW[] =           "off";
@@ -86,15 +87,15 @@ const char CMDSETTIME[] =       "settime";
 const char CMDGETCONFIG[] =     "getconfig";
 const char CMDCHGINTERVAL[] =   "chginterval";
 const char CMDCHGONTIME[] =     "chgontime";
-const char CMDCHGPUMPFACT[] =   "chgpumpfact";
-const char CMDRESETPUMPFACT[] = "rpfact";
+const char CMDCHGPUMPFACT[] =   "chgpf";
+const char CMDRESETPUMPFACT[] = "rpf";
 const char CMDPRINTTIME[] =     "ptime";
 const char CMDPRINTTEXT[] =     "ptext";
 const char CMDMIRRORTEXT[] =    "mtext";
 const char CMDAUTOPRINT[] =     "aprint";
 const char CMDDEBUGPUMP[] =     "dpump";
 const char CMDDEBUGTIMING[] =   "dtiming";
-const char CMDRESETCONFIG[] =   "resetconfig";
+const char CMDRESETCONFIG[] =   "rconfig";
 const char CMDSTARTOPERAT[] =   "startop";
 const char CMDSTOPOPERAT[] =    "stopop";
 const char CMDAUTOOPERAT[] =    "aop";
@@ -109,11 +110,11 @@ const char CMDPRINTVERT[] =     "pvert";
 const char CMDPRINTTWOCHAR[] =  "ptwo";
 
 #define RESETOPERATION   1
-#define RESETAUTOOPERAT  0
-#define RESETINTERVAL    1000
-#define RESETONTIME      300
+#define RESETAUTOOPERAT  1
+#define RESETINTERVAL    440
+#define RESETONTIME      380
 #define RESETPUMPFACT    100
-#define RESETAUTOPRINT   0
+#define RESETAUTOPRINT   1
 #define RESETAUTOTIME    60
 #define RESETDEBUG       0
 #define RESETDEBUGTIMING 0
@@ -121,8 +122,8 @@ const char CMDPRINTTWOCHAR[] =  "ptwo";
 #define RESETLEVELMIN    0
 #define RESETLEVELMAX    1023
 #define RESETSWTICHRASPI 1
-#define RESETPRINTVERT   0
-#define RESETPRINTTWO    0
+#define RESETPRINTVERT   1
+#define RESETPRINTTWO    1
 
 #define CHARMAXROWTIME   5
 #define CHARMAXROWBIG    7
@@ -225,20 +226,21 @@ void setup() {
   pinMode(PINPUMPCLK, OUTPUT);
   pinMode(PINPUMPLATCH, OUTPUT);
   pinMode(PINPUMPENABLE, OUTPUT);
-  pinMode(PINRASPIRELAY, OUTPUT);
+  digitalWrite(PINRASPIRELAY, HIGH);
   digitalWrite(PINPUMPENABLE, LOW);
   analogReference(DEFAULT);
   initVariables();
-  config.isoperating = true;
   Serial.begin(115200);
   inputString.reserve(25);
   commandString.reserve(20);
   valueString.reserve(12);
   initRTC();
-  //setTime(11,59,50,10,9,2013);
+  wdt_enable(WDTO_4S);
+  //setTime(13,59,50,22,9,2013);
 }
 
 void loop() {
+  wdt_reset();
   serialCommands();
   serialSendFlags();
   operatingFlags();
@@ -265,6 +267,9 @@ void initVariables() {
   } else {
     resetVariables();
   }
+  flags.raspiserial = true;
+  config.isoperating = true;
+  if (config.isoperating) statusVal.israspion = true;
 }
 
 void resetVariables() {
@@ -366,19 +371,11 @@ void checkOperatingHours() {
       }
       break;
     case 3:  //tuesday
-      if ( ((curhour>=11) && (curhour<=17)) ||
-           ((curhour==18) && (curmin<=30)) ) {
-        if (!config.isoperating) switchOperatingOn();
-      } else {
-        if (config.isoperating) switchOperatingOff();
-      }
-      break;
     case 4:  //wednesday
     case 5:  //thursday
     case 6:  //friday
-      if ( ((curhour==11) && (curmin>=30)) ||
-           ((curhour>=12) && (curhour<=17)) ||
-           ((curhour==18) && (curmin<=30)) ) {
+      if ( ( ((curhour==11) && (curmin>=30)) || (curhour==12) || ((curhour==13) && (curmin<=30)) ) ||
+           ( ((curhour==16) && (curmin>=30)) || (curhour==17) || ((curhour==18) && (curmin<=30)) ) ) {
         if (!config.isoperating) switchOperatingOn();
       } else {
         if (config.isoperating) switchOperatingOff();
@@ -410,7 +407,6 @@ void switchOperatingOff() {
 }
 
 void raspiFlags() {
-  if (config.isoperating&&(!statusVal.israspion)) triggerRaspiStartup();
   if (flags.raspion) {
     triggerRaspiStartup();
     flags.raspion = false;
@@ -986,10 +982,12 @@ void serialCommands() {
       commandString = inputString.substring(inputString.indexOf(CMDSEP)+1);
       if (commandString.startsWith(CMDHIGH)) {
         flags.raspion = true;
+        //digitalWrite(PINRASPIRELAY, HIGH);
         commandAck = true;
       }
       if (commandString.startsWith(CMDLOW)) {
         flags.raspioff = true;
+        //digitalWrite(PINRASPIRELAY, LOW);
         commandAck = true; 
       } 
     }

@@ -7,14 +7,14 @@ Befehle für Pumpcontroller:
 "settime x" - synchronisiert die RTC, x=Unix-Zeitcode in Sekunden von "date '+%s'"
 
 "getconfig" - antwortet mit aktueller Configuration des Pumpcontrollers
-"resetconfig" - setzt Konfiguration auf Standardwerte zurück und speichert diese in EEPROM
+"rconfig" - setzt Konfiguration auf Standardwerte zurück und speichert diese in EEPROM
 
 "getstatus" - liefert aktuellen Status der Tanks und Batterie
 
 "chginterval x" - x in ms, setzt Zeit zwischen zwei Tropfen
 "chgontime x" - x in ms, setzt die Einschaltzeit der Pumpen (100%)
-"chgpumpfact n x" - Pumpe n, x in %, ändert die individuelle Einschaltzeit
-"resetpumpfact" - setzt Pumpfaktoren auf 100%
+"chgpf n x" - Pumpe n, x in %, ändert die individuelle Einschaltzeit
+"rpf" - setzt Pumpfaktoren auf 100%
 
 "ptime" - gibt automatisch die aktuelle Uhrzeit hh:mm über die Pumpen aus - Antwort Zeitstempel und Bitmuster
 "ptext foo" - gibt Text als Laufschrift aus - Antwort Zeitstempel und Bitmuster
