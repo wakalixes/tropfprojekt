@@ -1,9 +1,0 @@
-TODO vor der Installation
-
-+ Bit-Ordering korrigieren
-+ Wasserstandsmessung kalibrieren (leer und voll messen, Werte abspeichern)
-
-
-TODO beim Aufbau der Installation
-
-+
